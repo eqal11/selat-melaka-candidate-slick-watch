@@ -1,5 +1,7 @@
 # Decisions
 
+- Docker runs as UID 1000 to match Hugging Face runtime permissions. Deployment packaging includes the sourced validation/cases.yaml register in the API Docker image. Local unverified validation outputs are excluded from this copy. The image build was not verified on 2026-10-26 because Docker Desktop Linux engine was not running.
+
 - Every detection is a candidate slick, never a confirmed spill. UI and README carry an educational/research disclaimer.
 - The application and API have no sample mode, synthetic fallback, or placeholder result. Synthetic pixels are test-only in `/tests` and are never imported by `/core`, `/api`, `/pipeline`, or `/web`.
 - Every result must validate against the exact real STAC item, including sensor platform, orbit, VV polarization, acquisition time, and STAC href; missing trace metadata fails processing.
