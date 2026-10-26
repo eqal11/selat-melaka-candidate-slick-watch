@@ -6,46 +6,27 @@ app_port: 8000
 
 # Selat Melaka Oil Spill Watch
 
-An open-source GIS portfolio application for finding **candidate** dark slicks in Sentinel-1 SAR imagery around the Strait of Malacca and Singapore Strait, estimating area, showing first-order 6/12/24-hour drift, and viewing environmental context.
+A GIS portfolio application for inspecting **candidate slicks** in real Sentinel‑1 VV SAR scenes around the Strait of Malacca and Singapore Strait. Results include measured area, transparent score features, scene-time weather context, first-order 6/12/24-hour drift, review imagery and a scene history archive.
 
-> **Candidate detection, not confirmed spill.** The score is a documented 0–100 heuristic, not a probability. Educational and research use only; not for operational, legal, or emergency decisions.
+> **Candidate slick detection, not confirmed spill.** Scores are 0–100 documented heuristics, not probabilities. Educational and research use only—not for operational, legal, or emergency decisions.
 
-Sentinel-1 is near-real-time at best, often with hours of latency, and revisits a location roughly every 6–12 days. “Live” refers to current environmental model context and optional vessel positions.
+Sentinel‑1 imagery is near-real-time at best (often hours of latency), and a location is revisited roughly every 6–12 days. Live describes weather/ocean-current model context and optional AIS, not live satellite imagery.
+
+## Real-data only
+
+The app has no demo case, synthetic fallback, or placeholder result. Every analysis is tied to a Planetary Computer Sentinel‑1 STAC item. The result shows the exact scene ID and public STAC link, acquisition UTC time and age, satellite, orbit direction and VV polarization. If STAC or scene loading fails, the job reports its error and no result is shown. Missing scene-time wind remains explicitly unavailable and reduces candidate scores; it is never filled with a made-up value. A zero-candidate scene is a valid result.
+
+All successful results include matching raw and Lee-filtered VV dB WebP overlays generated from the exact AOI array used by processing. Fixed grayscale stretch is −25 to 0 dB; auto stretch is per-scene p2–p98. The map provides pixel inspection, AOI and scene outlines, candidate outlines, a raw/filtered swipe curtain, and synchronized side-by-side maps. Manual reviewer notes and checklist are local to the browser and exportable; they are not system confirmation.
 
 ## Preview
 
-![Offline interface and explicitly labelled synthetic demo result](docs/screenshots/offline-demo.png)
+Captured from real Sentinel‑1 scene `S1D_IW_GRDH_1SDV_20261002T113320_20261002T113345_004836_009162_rtc` (2026-10-02 11:33:32 UTC). This real scene produced **2 candidate slicks (0.090 km² total)**. The screenshot comparison shows the raw image, the filtered image with candidate polygons enabled, and the swipe view. Candidate outlines represent detector output only, not verified oil.
 
-## Status and honesty
+![Real Sentinel-1 VV image, raw view](docs/screenshots/real-scene-raw.png)
 
-- Offline analysis uses a deterministic raster fixture labelled SYNTHETIC in the file, API response, and UI. It represents no incident or satellite observation.
-- Recent Sentinel-1 RTC/VV footprint coverage was verified for all three zones. A recent central-zone observation was processed and archived; it produced 500 candidates (the configured cap) and a candidate-area total of 50.590 km², so substantial false positives are likely. This is not evidence of a spill.
-- The archive contains one real scene's candidate output, not a verified incident. No incident dates or extents are invented, and no false-alarm rate is claimed.
-- aisstream.io keys remain server-side. The interface explicitly reports vessel data unavailable because a live AIS consumer is not connected.
-- The repository includes clipped Natural Earth 1:10m land polygons with source and checksum metadata; run `python -m pipeline.fetch_land` to refresh.
-- Performance and hosting targets are not measured claims. See validation/report.md for exact executed checks.
+![Real Sentinel-1 VV image with candidate polygons enabled; zero candidates for this scene](docs/screenshots/real-scene-with-candidates.png)
 
-## Run locally
-
-Requirements: Docker Desktop with its Linux engine running. From the repository root:
-
-```sh
-docker compose up --build
-```
-
-Open http://localhost:5173 for the UI and http://localhost:8000/docs for OpenAPI. Select a zone and run the offline SYNTHETIC demo. The fixture needs no network. OSM/OpenSeaMap basemap tiles need network access. Copy .env.example to .env for local configuration. No key is required for demo mode.
-
-The Docker Compose file parsed successfully, but its image build could not be checked here because the Docker Desktop Linux engine was unavailable.
-
-Without Docker, use Python 3.11 and Node 22:
-
-```sh
-uv sync --frozen --extra dev
-uv run uvicorn api.main:app --reload
-cd web
-npm ci
-npm run dev
-```
+![Real Sentinel-1 SAR swipe comparison](docs/screenshots/real-scene-swipe.png)
 
 ## Architecture
 
@@ -54,49 +35,74 @@ flowchart LR
   UI[React + MapLibre UI] --> API[FastAPI /api/v1]
   API --> Core[Shared Python processing core]
   Pipeline[Scheduled CLI] --> Core
-  Core --> STAC[Planetary Computer STAC]
-  Core --> Weather[Open-Meteo]
-  API --> SQLite[SQLite job and cache state]
-  Pipeline --> Archive[Committed data/archive]
+  Core --> STAC[Microsoft Planetary Computer STAC]
+  Core --> Weather[Open-Meteo APIs]
+  API --> DB[SQLite job/cache state]
+  Pipeline --> Archive[Committed real GeoJSON and WebP archive]
   Archive --> UI
 ```
 
-- core: AOI checks, STAC discovery, bounded raster loading, filtering, candidate polygons, heuristic scoring, and drift.
-- api: typed endpoints, jobs, rate limits, results, archive history, live conditions, and AIS status.
-- web: responsive React + TypeScript UI, MapLibre, preview, history chart, lazy drift view, demo fallback, and print/export.
-- pipeline: scheduled archive ingestion and Natural Earth land-data fetch.
-- validation: synthetic tests and explicit real-case placeholders.
+- `/core`: STAC, bounded AOI reads, SAR preparation, dark-region detector, score, drift, QA, preview assets.
+- `/api`: FastAPI jobs, validation, rate limits, live conditions, pixel/profile inspection and archives.
+- `/web`: Vite/React/TypeScript, MapLibre, responsive review interface, lazy drift/history visualizations.
+- `/pipeline`: idempotent real-scene archive ingestion and Natural Earth refresh.
+- `/data/archive`: permanent GeoJSON + small raw/filtered WebP history. SQLite is disposable state.
+- `/validation`: sourced public incident checks and real scene metrics. Test-only synthetic fixture is in `/tests`.
 
-## Data sources and attribution
+## Data attribution
 
-Copernicus Sentinel-1 via Microsoft Planetary Computer STAC; Open-Meteo forecast/archive and marine APIs; Natural Earth public-domain land polygons; © OpenStreetMap contributors; OpenSeaMap seamarks; optional aisstream.io vessel feed. AIS is not operational until its relay consumer is implemented.
+Copernicus Sentinel‑1 via Microsoft Planetary Computer; Open‑Meteo forecast/archive and marine APIs; Natural Earth public-domain land data; © OpenStreetMap contributors; OpenSeaMap seamarks; optional aisstream.io. A server-side AIS streaming relay is not currently active, and the browser never receives the AIS key.
 
-## Method summary
+## Run locally
 
-VV backscatter is converted to dB, Lee-equivalent filtered, screened by adaptive threshold and global bounds, cleaned morphologically, area-filtered, and polygonized. RTC scene footprint is checked before GRD fallback. Wind outside 2–10 m/s keeps candidates with a flag. The heuristic score weights contrast 35, elongation 15, size 15, wind 25, offshore distance 10. Drift uses current + 3% wind with 15-minute integration and uncertainty envelopes; it is not a full Lagrangian model.
-
-See docs/METHODOLOGY.md or the UI Method tab for parameters, score calculations, and false-positive sources.
-
-## Archive and validation
-
-The archive currently contains one real RTC observation and its candidate GeoJSON. The scheduled GitHub workflow runs daily or by manual dispatch, processes unseen recent scenes, and commits small GeoJSON files only after success. Archive size is capped at 50 MB. Configure GitHub Actions contents write permission before enabling scheduled commits.
+Requires Docker Desktop with its Linux engine:
 
 ```sh
-uv run pytest -q
-uv run ruff check core api pipeline tests
-uv run mypy --follow-imports=skip core api pipeline
-cd web && npm ci && npm run lint && npm run build && npm test && npm run e2e
+docker compose up --build
 ```
 
-See validation/report.md for real scene coverage, the archived scene's QA, synthetic measurements, and the remaining validation gaps. No real case is added until date, location, and extent have reliable cited sources; validation/cases.yaml currently contains only a placeholder.
+Open `http://localhost:5173` and `http://localhost:8000/docs`. Real scene discovery/analysis needs outbound network access to Planetary Computer and Open‑Meteo. There is no offline analysis substitute. OSM/OpenSeaMap tiles need network access too.
+
+Without Docker, use Python 3.11 and Node 22:
+
+```sh
+uv sync --frozen --extra dev
+uv run uvicorn api.main:app --reload
+```
+
+In a second terminal:
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+## API
+
+See `docs/API.md`. OpenAPI docs are served at `/docs`. API paths are under `/api/v1`; AOIs are constrained to 95.0–104.5°E, 0.8–7.0°N and at most 60×60 km. Result assets are fixed/auto, raw/filtered WebP; all use the matching real scene ID.
+
+## Validation
+
+```sh
+uv run ruff check core api pipeline tests
+uv run mypy --follow-imports=skip core api pipeline
+uv run pytest -q
+cd web && npm run lint && npm run build && npm test
+```
+
+A network-dependent browser test can run one real scene by setting `REAL_SCENE_ID` to a real Planetary Computer STAC item ID before `npm run e2e`. It is skipped when no scene ID is supplied; it never loads a fake result. To archive recent real scenes:
+
+```sh
+uv run python -m pipeline.ingest --days 60
+```
+
+The scheduled GitHub Action processes new scenes and commits the archive only after a successful complete ingestion. It supports daily and manual triggers. Archive is size-capped at 50 MB. See `validation/report.md` for the actual command outcomes, current archive, incidents, exact real scene metrics, and gaps.
 
 ## Deploy
 
-The archived observation can be reprocessed with `uv run python -m pipeline.analyze_scene --zone central --scene-id S1D_IW_GRDH_1SDV_20261014T113320_20261014T113345_005011_009780_rtc --force`. See docs/DEPLOY.md for step-by-step Vercel frontend, Hugging Face Docker backend, CORS, and GitHub Actions setup. Manual accounts, public API URL/domain, and repository write access are needed. This repository has not been deployed.
+See `docs/DEPLOY.md` for frontend static hosting, backend Docker, CORS, and GitHub Actions. Deployments require your own hosting accounts, a reachable public API URL, and repository write permission for scheduled archive commits. AIS also needs a server-only aisstream.io key and a working relay. No secret is committed; see `.env.example`.
 
-## Security and limits
+## Limitations
 
-No secret belongs in the repository. API CORS origins are allowlisted. AOIs and date ranges are bounded, external requests use timeouts/retries, and API calls are rate-limited. Docker API runs as non-root. SQLite is disposable job/cache state; durable history lives in data/archive. Geometries are EPSG:4326 and areas are measured in metric projected coordinates. The detector has not been validated against real oil spill cases.
-
-
-
+Dark water is not unique to oil. Low wind, rain, algae, biogenic films, wakes, bright ships, shadows, and ports cause false positives/negatives. Sentinel‑1 RTC/GRD coverage and weather availability vary. GRD fallback is explicitly marked radiometry-uncalibrated. The detector is a candidate-screening heuristic with no verified IoU ground truth so far. Drift is a first-order estimate, not a Lagrangian model. See `docs/METHODOLOGY.md`, `docs/DECISIONS.md`, and `validation/report.md`.

@@ -1,1 +1,7 @@
-import {describe,expect,it} from 'vitest';import {ResultSchema} from './schema';describe('ResultSchema',()=>{it('requires explicit source label and candidate result structure',()=>{expect(ResultSchema.safeParse({id:'x',data_label:'UNLABELLED'}).success).toBe(false)});it('accepts only heuristic scores in documented range',()=>{const parsed=ResultSchema.safeParse({id:'x',data_label:'SYNTHETIC',scene_id:'SYNTHETIC-demo',collection:'SYNTHETIC',acquisition_time:'2025-01-15T04:00:00Z',candidates:{features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[]},properties:{id:'c1',label:'candidate',data_label:'SYNTHETIC',area_km2:1,acquisition_time:'2025-01-15T04:00:00Z',score:101,band:'High',flags:[],breakdown:{}}}]},drift:[],qa:{valid_pixel_percent:100,aoi_coverage_percent:100,wind_available:true,data_age_hours:1,processing_seconds:1,flags:[]},total_area_km2:1,conditions:{},notice:'Candidate'});expect(parsed.success).toBe(false)})});
+import {describe,expect,it} from 'vitest';
+import {ScoreSchema} from './score-schema';
+import {ResultSchema} from './schema';
+describe('real-result validation',()=>{
+ it('rejects responses without a traceable real scene',()=>{expect(ResultSchema.safeParse({data_label:'UNLABELLED'}).success).toBe(false)});
+ it('rejects heuristic scores outside 0–100',()=>{expect(ScoreSchema.safeParse(101).success).toBe(false);expect(ScoreSchema.safeParse(65).success).toBe(true)});
+});

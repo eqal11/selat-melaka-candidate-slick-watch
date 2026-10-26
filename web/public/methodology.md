@@ -1,34 +1,46 @@
 # Methodology and limitations
 
-All mapped detections are **candidate slicks**, never confirmed spills. Educational and research use only; not for operational, legal, or emergency decisions.
+## Scope and honest interpretation
 
-## Sentinel-1 SAR
+The application screens real Copernicus Sentinel-1 SAR observations for dark-water regions that could merit review. Every detection is a **candidate slick**, never a confirmed spill. Dark radar backscatter is not specific to petroleum. This is educational and research software only; it must not be used for operational, legal, safety, or emergency decisions.
 
-Sentinel-1 measures microwave backscatter. Oil films can damp short waves and appear darker in VV backscatter, but darkness is not unique to oil. Low winds, rain cells, algae, ship wakes, biogenic films, and island wind shadows can look similar. Sentinel-1 is near-real-time at best (often hours of latency) and revisits roughly every 6–12 days, depending on orbit and location.
+Sentinel-1 is near-real-time at best: catalog and processing latency can be hours, and a location's nominal revisit is roughly 6–12 days. Each displayed/archive result identifies its STAC item, acquisition time UTC, satellite, orbit direction, polarization, age, and QA.
 
-The app searches Microsoft Planetary Computer Sentinel-1 RTC VV first. It checks footprint overlap and requires 80% of the AOI. When RTC coverage is insufficient, the code tries Sentinel-1 GRD. The current GRD fallback scales digital numbers to a nominal background and is not calibrated sigma-nought; output is explicitly flagged.
+## SAR backscatter and preview
 
-## Detection defaults
+Sentinel-1 is a C-band synthetic aperture radar. VV backscatter is converted to decibels as `10 log10(power)`; non-positive or nodata pixels are invalid. Oil films can damp capillary waves and create low-return patches, but low wind, rain, biogenic films/algae, wakes, island wind shadow, and acquisition geometry can look similar. Bright ships and fixed infrastructure create other artifacts.
 
-Working resolution is 30 m (20–40 m allowed). Convert power to dB using 10 log10(power). A 5-pixel local-moment Lee-equivalent filter reduces speckle. Adaptive threshold defaults to local mean minus 1.8 × max(local standard deviation, 0.5 dB) within a 51-pixel window. Dark backscatter is bounded from −35 to −17 dB. Morphological opening/closing removes speckle fragments. Minimum area is 0.025 km²; output geometry simplification is half a pixel. Real processing uses a 1.5 km Natural Earth coast buffer. AOI loading is bounded by a 384 MB estimated working-memory budget.
+The detector's raw and Lee-equivalent filtered arrays both come from the exact AOI read used in analysis. Pixels outside the AOI and nodata are excluded. The server encodes decimated georeferenced WebP previews; map bounds are the AOI bounds and QA records overlap with the item footprint and raster/AOI corner residual. The documented fixed grayscale stretch is **−25 to 0 dB**. Auto stretch clips per-scene percentiles **2–98**. Fixed and auto are display transforms only; they do not change the detector.
 
-Wind outside 2–10 m/s keeps candidates with wind_out_of_range and caps the score at 39. Missing wind is flagged and caps score at 49.
+## Processing sequence and defaults
 
-## Heuristic score, not probability
+1. Search Microsoft Planetary Computer STAC, prefer `sentinel-1-rtc` VV, and verify footprint overlap. Use `sentinel-1-grd` only when no usable RTC item exists; mark the calibration caveat. Read only the AOI window with bounded/dask-backed COG reads. Decimate large AOIs to a working resolution no coarser than the configured memory budget permits; fail explicitly on budget exhaustion.
+2. Convert to dB, ignore nodata, and apply a documented Lee-equivalent local speckle smoother for filtered products and detection.
+3. Rasterize the configured Natural Earth land polygon and expand it by **2.5 km**. Apply known port buffers (default **3 km**) and bright-target detection plus a **300 m** halo. Offshore platform data is not comprehensive; the result QA flags when that mask is unavailable.
+4. Form a local CFAR-like threshold from a **3.5 standard-deviation** depression relative to a local background. Apply global backscatter sanity bounds. This is a transparent heuristic, not a calibrated CFAR probability model.
+5. Morphologically close small fragments and merge nearby components. Retain components between **0.03 and 10 km²**, with at least **3 dB** contrast. Reject implausibly elongated or low-compactness shapes and large smooth regions typical of rain cells or island wind shadows. These limits are tunable screening rules; the real scene evaluation is too small to claim accuracy.
+6. Wind gate uses scene-time wind from Open-Meteo with a nominal valid interval of **2–10 m/s**. Outside the interval, candidate regions are retained with `wind_out_of_range` and a score penalty rather than silently discarded. Missing wind is null, flagged `wind_unavailable`, and receives no wind-support score. Scene results include a funnel: raw dark pixels, after land, after ship/platform/port, wind-pass/removal/unknown, area components, shape candidates, final candidates.
+7. Calculate area in a metric CRS and output polygons in EPSG:4326. Keep output simplified and validate GeoJSON.
+8. Add scene-time context, QA (valid pixel %, AOI coverage, wind availability, age, processing duration, working resolution, footprint overlap and corner residual). A zero-candidate result is valid and includes the scene and funnel.
 
-Five components sum to a 0–100 review heuristic:
-- Contrast: 35 × clamp(contrast_db / 8, 0, 1), maximum 35.
-- Elongation: 15 × clamp((elongation − 1) / 4, 0, 1), maximum 15.
-- Size: 15 × clamp(area_km² / 0.5, 0, 1), maximum 15.
-- Wind: 25 points when available and within the configured gate, otherwise 0.
-- Offshore distance: 10 × clamp(distance_to_coast_km / 5, 0, 1), maximum 10.
+### Heuristic score
 
-Bands: Low (<40), Medium (40–69.9), High (70–100). These are not calibrated confidence or probability.
+Scores are integers **0–100**, not probabilities. The present transparent rule assigns up to 35 points for contrast (`35 × clamp(contrast_dB / 8, 0, 1)`), 15 for elongation (`15 × clamp((elongation − 1) / 4, 0, 1)`), 15 for area (`15 × clamp(area_km² / 0.5, 0, 1)`), 25 for in-window scene-time wind, and 10 for offshore distance (`10 × clamp(coast_km / 5, 0, 1)`). Missing wind gives zero wind points. The final score is capped at 39 for out-of-range wind and 49 for unavailable wind. Bands are Low (0–39), Medium (40–69), and High (70–100). The UI's default threshold of 40 hides Low scores but the threshold can be changed. Inspect `core/scoring.py` for the executable implementation and tests.
 
-## Drift
+## Drift estimate
 
-First-order velocity is ocean current + 3% of 10 m wind, integrated at 15-minute intervals for 6, 12, and 24 hours. Envelopes sample windage 2%, 3%, 4% and direction offsets −20°, 0°, +20°, then expand for unresolved uncertainty. Missing current triggers wind-only drift, a wider envelope, and current_unavailable. This is not a full Lagrangian model; waves, mixing, shore interaction, and evolving weather are omitted.
+For each candidate centroid, use the nearest available ocean-current vector plus **3% of the 10 m wind vector**. Integrate in **15-minute** steps to **6, 12, and 24 hours**. The envelope varies windage from **2–4%** and direction by **±20°**. If current is unavailable, use wind only, mark `current_unavailable`, and widen the envelope. This first-order advection sketch is not a full Lagrangian model and omits waves, tides, Stokes drift, weathering, and shoreline interaction.
 
-## Sources
+## Live context and sources
 
-Copernicus Sentinel data via Microsoft Planetary Computer STAC; Open-Meteo forecast/archive and marine APIs; Natural Earth public-domain land polygons; OpenStreetMap contributors; optional aisstream.io vessel feed.
+Wind is from Open-Meteo forecast/archive endpoints; current is from Open-Meteo Marine. Values are model output, with source API and timestamp displayed. They are not in-situ measurements. Conditions refresh every 10 minutes. AIS is hidden/unavailable unless a server-side aisstream.io streaming relay is actually configured and connected; a key alone does not mean positions are available.
+
+## Known limitations
+
+- No source-verified offshore slick footprint exists for the incident cases currently listed. Do not compute IoU or distance from place names or released volume.
+- Incident matched-scene outcomes and 60-day zone ingestion are reported in `validation/report.md`; they do not establish detector accuracy.
+- Candidate counts on a small, mostly unlabelled sample are not a false-alarm rate. A false-alarm rate requires verified negatives and suitable surveyed area.
+- Port and offshore-platform masks are incomplete. The QA flag communicates missing platform-mask data.
+- RTC footprint overlap does not equal valid ocean pixels. Review per-result AOI coverage and sea-pixel QA.
+- Drift and weather context are first-order/model estimates, not operational forecasts.
+- Network, STAC, Open-Meteo, or absent-AIS errors are shown directly. No sample/demo content is substituted.
