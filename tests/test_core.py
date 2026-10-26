@@ -7,7 +7,7 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from shapely.ops import transform
 
-from core.detection import lee_filter, local_dark_pixels, polygonize, to_db
+from core.detection import candidate_components, lee_filter, local_dark_pixels, polygonize, to_db
 from core.drift import forecast, integrate
 from core.engine import _projected_preview, _webp
 from core.loading import metric_grid
@@ -54,11 +54,11 @@ def test_aoi_bounds_validation():
             validate_bbox(bbox)
 
 
-def test_dates_and_demo_parameter_rejected():
+def test_dates_and_unknown_option_rejected():
     with pytest.raises(ValueError):
         AnalyzeRequest(aoi=[100.8, 2.7, 101, 2.9], start="2025-01-01", end="2025-01-05")
     with pytest.raises(ValueError):
-        AnalyzeRequest.model_validate({"aoi": [100.8, 2.7, 101, 2.9], "demo": True})
+        AnalyzeRequest.model_validate({"aoi": [100.8, 2.7, 101, 2.9], "offline_mode": True})
 
 
 def test_wind_gating_and_score_weights():
@@ -122,3 +122,19 @@ def test_memory_budget():
 
     with pytest.raises(MemoryError):
         check_budget(4000, 4000, Parameters(memory_mb=64))
+
+
+def test_area_rejected_dark_component_is_kept_as_filtered():
+    db = np.full((60, 60), -15.0, dtype=np.float32)
+    db[20:24, 20:24] = -25.0
+    raw_dark = np.zeros_like(db, dtype=bool)
+    raw_dark[20:24, 20:24] = True
+    sea = np.ones_like(raw_dark)
+    protected = np.zeros_like(raw_dark)
+    affine = from_origin(400000, 3000000, 30, 30)
+    records, funnel = candidate_components(db, raw_dark, sea, protected, True, affine, Parameters())
+    assert len(records) == 1
+    assert records[0]["label"] == "filtered"
+    assert records[0]["reason_code"] == "area_out_of_range"
+    assert funnel["final_candidates"] == 0
+    assert funnel["filtered_area"] == 1

@@ -66,6 +66,11 @@ def candidate_components(
         "after_area_filter_components": 0,
         "after_shape_filter_candidates": 0,
         "final_candidates": 0,
+        "filtered_dark_areas": 0,
+        "filtered_area": 0,
+        "filtered_contrast": 0,
+        "filtered_shape": 0,
+        "filtered_smooth_region": 0,
     }
     after_land = raw_dark & sea
     after_protected = after_land & ~protected_mask
@@ -84,9 +89,10 @@ def candidate_components(
     for component_id in range(1, component_count + 1):
         component = labels == component_id
         pixels = int(component.sum())
-        if min_pixels <= pixels <= max_pixels:
-            area_components.append((component, pixels))
-    funnel["after_area_filter_components"] = len(area_components)
+        area_components.append((component, pixels))
+    funnel["after_area_filter_components"] = sum(
+        min_pixels <= pixels <= max_pixels for _, pixels in area_components
+    )
     records = []
     for component, pixels in area_components:
         component_shapes = [
@@ -119,14 +125,23 @@ def candidate_components(
         contrast_std = float(np.sqrt(outside_values.var() + inside_values.var()))
         area_km2 = area_m2 / 1e6
         smooth_large = area_km2 >= 1.0 and float(inside_values.std()) < 1.0
-        if (
-            contrast_db < params.min_contrast_db
-            or compactness < params.min_compactness
-            or elongation > params.max_elongation
-            or smooth_large
-        ):
-            continue
-        funnel["after_shape_filter_candidates"] += 1
+        reasons = []
+        if not min_pixels <= pixels <= max_pixels:
+            reasons.append("area_out_of_range")
+            funnel["filtered_area"] += 1
+        if contrast_db < params.min_contrast_db:
+            reasons.append("contrast_below_minimum")
+            funnel["filtered_contrast"] += 1
+        if compactness < params.min_compactness or elongation > params.max_elongation:
+            reasons.append("shape_out_of_range")
+            funnel["filtered_shape"] += 1
+        if smooth_large:
+            reasons.append("large_smooth_region")
+            funnel["filtered_smooth_region"] += 1
+        if not reasons:
+            funnel["after_shape_filter_candidates"] += 1
+        else:
+            funnel["filtered_dark_areas"] += 1
         records.append(
             {
                 "geometry": geom,
@@ -138,9 +153,12 @@ def candidate_components(
                 "contrast_db": contrast_db,
                 "contrast_std_db": contrast_std,
                 "mean_db": float(inside_values.mean()),
+                "label": "filtered" if reasons else "candidate",
+                "reason_code": reasons[0] if reasons else None,
+                "reason_codes": reasons,
             }
         )
-    funnel["final_candidates"] = len(records)
+    funnel["final_candidates"] = sum(record["label"] == "candidate" for record in records)
     return records, funnel
 
 

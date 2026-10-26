@@ -129,7 +129,9 @@ class Breakdown(Model):
 
 class CandidateProperties(Model):
     id: str
-    label: Literal["candidate"] = "candidate"
+    label: Literal["candidate", "filtered"] = "candidate"
+    reason_code: str | None = None
+    reason_codes: list[str] = Field(default_factory=list)
     data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     acquisition_time: datetime
     area_km2: float = Field(gt=0)
@@ -348,6 +350,7 @@ class ValidationCasesResponse(Model):
 class HealthResponse(Model):
     status: Literal["ok"]
     version: str
+    dependencies: dict[str, str]
 
 
 class LiveConditionsResponse(Model):

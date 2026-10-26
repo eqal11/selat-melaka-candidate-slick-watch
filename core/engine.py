@@ -156,6 +156,16 @@ def process_arrays(
     records, funnel = candidate_components(
         filtered_db, raw_dark, sea, protected, wind_ok, affine, params, wind_available
     )
+    if not wind_ok:
+        reason = "wind_out_of_range" if wind_available else "wind_unavailable"
+        for record in records:
+            if record["label"] == "candidate":
+                record["label"] = "filtered"
+                record["reason_code"] = reason
+                record["reason_codes"].append(reason)
+                funnel["filtered_dark_areas"] += 1
+                funnel["filtered_wind"] = funnel.get("filtered_wind", 0) + 1
+        funnel["final_candidates"] = 0
     progress("filtering", 65)
     flags = list(dict.fromkeys(forcing.flags + wind_flags))
     if item.collection_id == "sentinel-1-grd":
@@ -210,8 +220,13 @@ def process_arrays(
         geom = record["geometry"]
         centroid = geom.centroid
         lon, lat = back(centroid.x, centroid.y)
+        is_filtered = record["label"] == "filtered"
+        feature_flags = flags + record["reason_codes"] + ([] if record["nearest_vessel"] else ["ais_context_unavailable"])
         properties = dict(
-            id=f"candidate-{index + 1}",
+            id=f"{'filtered' if is_filtered else 'candidate'}-{index + 1}",
+            label=record["label"],
+            reason_code=record["reason_code"],
+            reason_codes=record["reason_codes"],
             data_label="REAL Sentinel-1",
             acquisition_time=acquired,
             area_km2=record["area_km2"],
@@ -229,10 +244,19 @@ def process_arrays(
             score=record["score"],
             band=record["band"],
             breakdown=record["breakdown"],
-            flags=flags + ([] if record["nearest_vessel"] else ["ais_context_unavailable"]),
+            flags=feature_flags,
         )
+        if is_filtered:
+            base = properties["score"]
+            scale = min(1.0, 19.0 / max(base, 1e-9))
+            properties["breakdown"] = properties["breakdown"].model_copy(
+                update={key: round(value * scale, 2) for key, value in properties["breakdown"].model_dump().items()}
+            )
+            properties["score"] = round(sum(properties["breakdown"].model_dump().values()), 1)
+            properties["band"] = "Low"
         candidates.append(Candidate(geometry=mapping(transform(back, geom)), properties=properties))
-        drifts.append(forecast(properties["id"], lon, lat, sqrt(geom.area / np.pi), forcing))
+        if not is_filtered:
+            drifts.append(forecast(properties["id"], lon, lat, sqrt(geom.area / np.pi), forcing))
     progress("drift", 85)
 
     coverage = float(valid.sum() / max(inside_aoi.sum(), 1) * 100)
@@ -282,7 +306,9 @@ def process_arrays(
         drift=drifts,
         conditions=forcing,
         qa=qa,
-        total_area_km2=sum(value.properties.area_km2 for value in candidates),
+        total_area_km2=sum(
+            value.properties.area_km2 for value in candidates if value.properties.label == "candidate"
+        ),
         preview_bounds=aoi,
         preview_urls={},
         coastline=Geometry.model_validate(mapping(coastline)) if coastline is not None else None,
