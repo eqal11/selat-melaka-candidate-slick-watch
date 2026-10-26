@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "3554619937f7a5a5b5005e6c",
+      "zone": "central",
+      "scene_id": "S1D_IW_GRDH_1SDV_20261014T113320_20261014T113345_005011_009780_rtc",
+      "acquisition_time": "2026-10-14T11:33:32.905134Z",
+      "data_label": "OBSERVATION",
+      "count": 500,
+      "total_area_km2": 50.589899999999986,
+      "path": "central/2026-10-14/3554619937f7a5a5b5005e6c.geojson",
+      "qa": {
+        "valid_pixel_percent": 100.0,
+        "aoi_coverage_percent": 100.0,
+        "sea_pixel_percent": 95.11614529789004,
+        "wind_available": true,
+        "data_age_hours": 278.94127682833334,
+        "processing_seconds": 60.56046679999963,
+        "software_version": "0.1.0",
+        "working_resolution_m": 30,
+        "flags": [
+          "candidate_limit_500"
+        ]
+      }
+    }
+  ]
+}

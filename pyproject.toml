@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "selat-melaka-oil-spill-watch"
+version = "0.1.0"
+description = "Educational Sentinel-1 candidate slick detection and first-order drift"
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+dependencies = [
+ "fastapi==0.116.1", "uvicorn==0.35.0", "pydantic==2.11.7", "sqlalchemy==2.0.43",
+ "pystac-client==0.9.0", "planetary-computer==1.0.0", "odc-stac==0.4.0",
+ "rioxarray==0.19.0", "xarray==2025.8.0", "dask[array]==2025.7.0", "numpy==2.2.6",
+ "scipy==1.16.1", "scikit-image==0.25.2", "shapely==2.1.1", "pyproj==3.7.2",
+ "geopandas==1.1.1", "rasterio==1.4.3", "httpx==0.28.1", "slowapi==0.1.9",
+ "pillow==11.3.0", "websockets==15.0.1", "pyyaml==6.0.2", "pyshp==2.3.1",
+]
+[project.optional-dependencies]
+dev = ["pytest==8.4.1", "ruff==0.12.10", "mypy==1.17.1", "types-PyYAML==6.0.12.20250822"]
+[tool.setuptools.packages.find]
+include = ["core*", "api*", "pipeline*"]
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = ["work", "web"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+

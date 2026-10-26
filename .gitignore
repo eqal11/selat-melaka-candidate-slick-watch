@@ -11,3 +11,5 @@ web/test-results/
 web/playwright-report/
 .venv/
 *.egg-info/
+
+api/var/
