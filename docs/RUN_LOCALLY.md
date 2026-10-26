@@ -1,35 +1,29 @@
 # Running real-data validation locally
 
-The current hosted/sandbox shell cannot reach external services (`PermissionError(13)` before an HTTP response). These commands are intended for a normal terminal with outbound HTTPS. No API keys are needed for Planetary Computer STAC, Copernicus STAC/OData, ASF, or Open-Meteo.
+The validation runner checks the live catalog endpoints, searches real Sentinel-1 RTC/GRD items, then loads and processes selected scenes for cases with source-published coordinates. Processing uses a separate 0.12° case window whose geodesic width and height must remain at or below 60 km. These case windows do not change the app's Strait-only AOI limits.
 
-Use Python 3.11 and install the locked environment:
-
-```powershell
-uv sync --frozen --extra dev
-```
-
-Connectivity-only check (prints HTTP codes and writes `validation/results/connectivity-latest.json`):
+Python 3.11 is required. This checkout already has a project virtual environment; if it exists, `uv` is not required. From the repository root in PowerShell, run the detector validation with:
 
 ```powershell
-uv run python -m pipeline.run_validation --dry-run
+.\.venv\Scripts\python.exe -m pipeline.run_validation --resume
 ```
 
-Search incidents ±3 days and sample ten acquisition dates per seep site; checkpoints are written after each case and retained for resume:
+The command prints a line for each case and each processed scene. It writes case summaries to `validation/results/cases/{case-id}.json`; processed scene JSON and raw/filtered WebP previews are written below `validation/results/cases/{case-id}/`. The API exposes those real results to the Validation cases tab after its page is refreshed. A candidate count of zero is a valid result. Scene-search success alone is not a detector result.
+
+`--resume` skips cases already marked processed and retries incomplete searches/processing. Omit `--resume` to repeat every search and processing run. Add `--case-id gc600-gulf-of-mexico-natural-seep` to run just one named case while debugging. `--search-only` performs catalog searches without raster loading. `--dry-run` checks connectivity only and does not search for scenes or run the detector.
+
+To change the seep sampling period, pass explicit UTC calendar dates, for example:
 
 ```powershell
-uv run python -m pipeline.run_validation --resume --seep-start 2017-01-01 --seep-end 2026-10-26
+.\.venv\Scripts\python.exe -m pipeline.run_validation --resume --seep-start 2017-01-01 --seep-end 2026-10-26
 ```
 
-Run the normal daily archive ingestion (the operation remains idempotent by zone and scene ID; archive is committed only after all requested scenes finish and the 50 MiB cap is checked):
+The runner uses only numeric coordinates already recorded in `validation/cases.yaml`; it does not geocode descriptive place names or invent coordinates. Cases without source coordinates remain marked unsearchable. Scene processing requires a matching Planetary Computer item with usable assets. Copernicus or ASF metadata matches without those assets are reported as not processed. A catalog error such as HTTP 429 is preserved in the case output and means the cross-catalog search is incomplete.
+
+The detector reports candidate slicks only, never confirmed spills. The reported slick dimensions in case sources are descriptive; the runner does not compute IoU without a georeferenced reference boundary. Current wind and ocean-current data may be unavailable for historical acquisition times; those cases retain the documented flags and are not silently discarded.
+
+The normal daily archive ingestion is separate from case validation and writes only the Strait study zones:
 
 ```powershell
-uv run python -m pipeline.run_ingest --days 60
+.\.venv\Scripts\python.exe -m pipeline.run_ingest --days 60
 ```
-
-Connectivity-only ingestion check:
-
-```powershell
-uv run python -m pipeline.run_ingest --dry-run
-```
-
-The current validation runner searches Planetary Computer and Copernicus STAC catalogs when coordinates exist. ASF is included in the connectivity gate but not integrated into scene query/normalization. It records unsearchable cases explicitly when source coordinates are absent. It currently does not raster-process global cases: its case AOIs lie outside the Strait-only result schema. Do not treat scene discovery as detector validation. A case-scoped global AOI processing extension and real-scene processing remain required before claiming worldwide detection outcomes.

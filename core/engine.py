@@ -6,7 +6,7 @@ import json
 import time
 from math import sqrt
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal, cast
 
 import numpy as np
 from PIL import Image
@@ -25,7 +25,16 @@ from core.detection import candidate_components, lee_filter, local_dark_pixels, 
 from core.drift import forecast
 from core.land import sea_mask
 from core.loading import check_budget, load
-from core.models import QA, AnalyzeRequest, Candidate, Candidates, Geometry, Result, utcnow
+from core.models import (
+    QA,
+    AnalyzeRequest,
+    Candidate,
+    CandidateProperties,
+    Candidates,
+    Geometry,
+    Result,
+    utcnow,
+)
 from core.scenes import search, search_optical
 from core.scoring import score, wind_gate
 
@@ -35,10 +44,14 @@ FIXED_MAX_DB = 0.0
 
 
 def cache_key(scene_id, request):
+    return result_cache_key(scene_id, request.aoi, request.parameters)
+
+
+def result_cache_key(scene_id, aoi, params):
     content = {
         "scene": scene_id,
-        "aoi": request.aoi,
-        "parameters": request.parameters.model_dump(),
+        "aoi": aoi,
+        "parameters": params.model_dump(),
         "version": __version__,
     }
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()[:24]
@@ -128,6 +141,8 @@ def process_arrays(
     forcing,
     progress: Callable = lambda *_: None,
     vessels=None,
+    ports_data=None,
+    analysis_scope: Literal["study_area", "validation_case"] = "study_area",
 ):
     began = time.perf_counter()
     check_budget(power.shape[1], power.shape[0], params)
@@ -181,8 +196,15 @@ def process_arrays(
         centroid = geom.centroid
         lon, lat = back(centroid.x, centroid.y)
         coast = centroid.distance(land) / 1000
-        port = min(ports(), key=lambda value: centroid.distance(Point(*project(value["lon"], value["lat"]))))
-        port_distance = centroid.distance(Point(*project(port["lon"], port["lat"]))) / 1000
+        port_catalog = ports() if ports_data is None else ports_data
+        port = (
+            min(port_catalog, key=lambda value: centroid.distance(Point(*project(value["lon"], value["lat"]))))
+            if port_catalog
+            else None
+        )
+        port_distance = (
+            centroid.distance(Point(*project(port["lon"], port["lat"]))) / 1000 if port else None
+        )
         total, band, breakdown = score(
             record["contrast_db"], record["elongation"], area, coast, wind_speed, flags
         )
@@ -198,7 +220,7 @@ def process_arrays(
         record["score"], record["band"], record["breakdown"] = total, band, breakdown
         record["coast_km"], record["port_name"], record["port_distance_km"] = (
             coast,
-            port["name"],
+            port["name"] if port else None,
             port_distance,
         )
         record["nearest_vessel"] = nearest
@@ -254,7 +276,12 @@ def process_arrays(
             )
             properties["score"] = round(sum(properties["breakdown"].model_dump().values()), 1)
             properties["band"] = "Low"
-        candidates.append(Candidate(geometry=mapping(transform(back, geom)), properties=properties))
+        candidates.append(
+            Candidate(
+                geometry=mapping(transform(back, geom)),
+                properties=CandidateProperties.model_validate(properties),
+            )
+        )
         if not is_filtered:
             drifts.append(forecast(properties["id"], lon, lat, sqrt(geom.area / np.pi), forcing))
     progress("drift", 85)
@@ -286,8 +313,8 @@ def process_arrays(
     result = Result(
         id="pending",
         scene_id=item.id,
-        satellite=satellite,
-        orbit_direction=orbit,
+        satellite=cast(Literal["S1A", "S1B", "S1C", "S1D"], satellite),
+        orbit_direction=cast(Literal["ASCENDING", "DESCENDING"], orbit),
         polarization=polarization,
         stac_href=stac_href,
         collection=item.collection_id,
@@ -295,11 +322,12 @@ def process_arrays(
             {"type": item.geometry["type"], "coordinates": item.geometry["coordinates"]}
         ),
         optical_scene=optical_scene,
-        optical_status=optical_status,
+        optical_status=cast(Literal["available", "none", "unavailable"], optical_status),
         zone=None,
         acquisition_time=acquired,
         processed_at=utcnow(),
         data_label="REAL Sentinel-1",
+        analysis_scope=analysis_scope,
         aoi=aoi,
         parameters=params,
         candidates=Candidates(features=candidates),
@@ -338,7 +366,7 @@ def process_arrays(
         bounds=np.asarray(aoi, dtype=np.float64),
     )
     assets["pixel-grid.npz"] = buffer.getvalue()
-    result.id = cache_key(item.id, AnalyzeRequest(aoi=aoi, scene_id=item.id, parameters=params))
+    result.id = result_cache_key(item.id, aoi, params)
     result.preview_urls = {
         name: f"/api/v1/results/{result.id}/{name}"
         for name in assets

@@ -36,12 +36,21 @@ def test_validation_case_register_has_sources_and_no_invented_results():
     assert len(incidents) >= 4 and len(seeps) >= 3
     assert all(len(case["sources"]) >= 2 for case in body["cases"])
     assert all(case["detector_result"] is None for case in body["cases"])
-    assert all(case["scene_search"]["scene_id"] is None for case in body["cases"])
     import json
     from pathlib import Path
 
     static_register = json.loads(Path("web/public/validation-cases.json").read_text(encoding="utf-8"))
-    assert static_register == body
+    static_cases = {case["id"]: case for case in static_register["cases"]}
+    for case in body["cases"]:
+        assert case["id"] in static_cases
+        assert case["sources"] == static_cases[case["id"]]["sources"]
+        ids = [row["scene_id"] for row in case["scene_search"].get("catalog_results", [])]
+        if case["scene_search"]["scene_id"] is not None:
+            assert case["scene_search"]["scene_id"] in ids
+        for row in case.get("processing_results", []):
+            if row["status"] == "processed":
+                assert row["data_label"] == "REAL Sentinel-1"
+                assert row["scene_id"] in ids
 
 
 def test_ais_stream_reports_missing_server_key(monkeypatch):

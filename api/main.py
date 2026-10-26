@@ -18,7 +18,7 @@ import httpx
 import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -47,6 +47,7 @@ from core.scenes import search
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("selat-watch")
+VALIDATION_PROCESSING_VERSION = 3
 VAR = Path(os.getenv("APP_DATA_DIR", str(Path(__file__).parent / "var")))
 VAR.mkdir(parents=True, exist_ok=True)
 DB = VAR / "jobs.sqlite3"
@@ -188,7 +189,7 @@ app = FastAPI(
     description="Real Sentinel-1 candidate slick analysis. No result confirms a spill.",
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
 @app.middleware("http")
@@ -248,11 +249,60 @@ def validation_cases():
     """Return source-linked case register; unrun cases never imply detector outcomes."""
     path = ROOT / "validation" / "cases.yaml"
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+        payload = ValidationCasesResponse.model_validate(
+            yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+        ).model_dump(mode="json")
+        results_dir = ROOT / "validation" / "results" / "cases"
+        for case in payload["cases"]:
+            checkpoint = results_dir / f"{case['id']}.json"
+            if not checkpoint.is_file():
+                continue
+            run = json.loads(checkpoint.read_text(encoding="utf-8"))
+            case["run_status"] = run.get("status")
+            case["scene_search"]["catalog_results"] = run.get("catalog_results", [])
+            case["scene_search"]["catalog_errors"] = run.get("catalog_errors", [])
+            if run.get("catalog_results"):
+                first = run["catalog_results"][0]
+                case["scene_search"].update(
+                    scene_id=first.get("scene_id"),
+                    acquisition_time_utc=first.get("acquisition_time_utc"),
+                    time_gap_hours=first.get("time_gap_hours"),
+                )
+            case["processing_results"] = []
+            if run.get("processing_version") != VALIDATION_PROCESSING_VERSION:
+                case["run_status"] = "stale_result_requires_reprocessing"
+                continue
+            for item in run.get("detector_results", []):
+                entry = dict(item)
+                result_path = ROOT / item.get("result_file", "")
+                if item.get("status") == "processed" and result_path.is_file():
+                    detail = json.loads(result_path.read_text(encoding="utf-8"))
+                    safe_scene = result_path.stem
+                    detail["preview_raw_url"] = (
+                        f"/api/v1/validation/cases/{case['id']}/{safe_scene}-raw.webp"
+                    )
+                    detail["preview_filtered_url"] = (
+                        f"/api/v1/validation/cases/{case['id']}/{safe_scene}-filtered.webp"
+                    )
+                    entry.update(detail)
+                case["processing_results"].append(entry)
         return ValidationCasesResponse.model_validate(payload)
     except Exception as exc:
         log.exception("Validation case register could not be loaded")
         raise HTTPException(500, "Validation case register is invalid or unavailable") from exc
+
+
+@app.get("/api/v1/validation/cases/{case_id}/{file_name}")
+def validation_preview(case_id: str, file_name: str):
+    if not re.fullmatch(r"[a-z0-9-]{1,80}", case_id) or not re.fullmatch(
+        r"[A-Za-z0-9_.-]{1,240}-(?:raw|filtered)\.webp", file_name
+    ):
+        raise HTTPException(404, "Validation preview not found")
+    root = (ROOT / "validation" / "results" / "cases" / case_id).resolve()
+    target = (root / file_name).resolve()
+    if target.parent != root or not target.is_file():
+        raise HTTPException(404, "Validation preview not found")
+    return FileResponse(target, media_type="image/webp", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/api/v1/scenes", response_model=SceneList)

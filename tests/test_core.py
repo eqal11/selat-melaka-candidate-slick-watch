@@ -138,3 +138,13 @@ def test_area_rejected_dark_component_is_kept_as_filtered():
     assert records[0]["reason_code"] == "area_out_of_range"
     assert funnel["final_candidates"] == 0
     assert funnel["filtered_area"] == 1
+
+
+def test_case_validation_aoi_scope_bypasses_study_box_but_keeps_size_cap():
+    gulf_bbox = (-88.7428, 28.6022, -88.2428, 29.1022)
+    with pytest.raises(ValueError, match="within lon 95-104.5"):
+        validate_bbox(gulf_bbox)
+    assert validate_bbox(gulf_bbox, study_area=False) == gulf_bbox
+    oversized = (-89.0, 28.0, -88.0, 29.0)
+    with pytest.raises(ValueError, match="60 x 60 km"):
+        validate_bbox(oversized, study_area=False)

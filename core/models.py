@@ -22,12 +22,18 @@ def utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def validate_bbox(value: tuple[float, float, float, float], limited: bool = True):
+def validate_bbox(
+    value: tuple[float, float, float, float],
+    limited: bool = True,
+    study_area: bool = True,
+):
     w, s, e, n = value
     if not all(math.isfinite(v) for v in value):
         raise ValueError("Coordinates must be finite")
-    if not (95 <= w < e <= 104.5 and 0.8 <= s < n <= 7):
+    if study_area and not (95 <= w < e <= 104.5 and 0.8 <= s < n <= 7):
         raise ValueError("AOI must be within lon 95-104.5, lat 0.8-7")
+    if not study_area and not (-180 <= w < e <= 180 and -90 <= s < n <= 90):
+        raise ValueError("Validation AOI must be within geographic coordinate bounds")
     width = abs(GEOD.inv(w, (s + n) / 2, e, (s + n) / 2)[2])
     height = abs(GEOD.inv(w, s, w, n)[2])
     if limited and (width > 60000 or height > 60000):
@@ -76,7 +82,7 @@ class AnalyzeRequest(Model):
     start: datetime | None = None
     end: datetime | None = None
     scene_id: str | None = Field(None, max_length=200, pattern=r"^[\w.:-]+$")
-    parameters: Parameters = Field(default_factory=Parameters)
+    parameters: Parameters = Field(default_factory=Parameters)  # type: ignore[arg-type]
 
     @field_validator("aoi")
     @classmethod
@@ -142,8 +148,8 @@ class CandidateProperties(Model):
     contrast_std_db: float = Field(ge=0)
     mean_db: float
     distance_to_coast_km: float | None = Field(None, ge=0)
-    nearest_port: str
-    distance_to_port_km: float = Field(ge=0)
+    nearest_port: str | None = None
+    distance_to_port_km: float | None = Field(None, ge=0)
     nearest_vessel: str | None = None
     vessel_distance_km: float | None = Field(None, ge=0)
     score: float = Field(ge=0, le=100)
@@ -226,6 +232,7 @@ class Result(Model):
     acquisition_time: datetime
     processed_at: datetime
     data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
+    analysis_scope: Literal["study_area", "validation_case"] = "study_area"
     aoi: tuple[float, float, float, float]
     parameters: Parameters
     candidates: Candidates
@@ -239,10 +246,10 @@ class Result(Model):
     notice: str = "Candidate detection, not confirmed spill. Educational and research use only; not for operational, legal or emergency decisions."
     _utc_times = field_validator("acquisition_time", "processed_at")(utc)
 
-    @field_validator("aoi")
-    @classmethod
-    def valid_aoi(cls, v):
-        return validate_bbox(v)
+    @model_validator(mode="after")
+    def valid_aoi(self):
+        validate_bbox(self.aoi, study_area=self.analysis_scope == "study_area")
+        return self
 
 
 class PixelResponse(Model):
