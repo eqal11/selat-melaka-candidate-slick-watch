@@ -58,3 +58,44 @@ def test_ais_stream_reports_missing_server_key(monkeypatch):
     response = client.get("/api/v1/live/vessels")
     assert response.status_code == 200
     assert "AIS key not configured" in response.text
+
+
+def test_server_budget_rejects_large_aoi_before_scene_access(monkeypatch):
+    import api.main as api
+
+    monkeypatch.setenv("ANALYSIS_MEMORY_MB", "128")
+    def unexpected_search(*args, **kwargs):
+        raise AssertionError("Rejected jobs must not query remote imagery")
+    monkeypatch.setattr(api, "search", unexpected_search)
+    response = client.post("/api/v1/analyze", json={
+        "aoi": [100.8, 2.65, 101.3, 3.15],
+        "scene_id": "test-only-scene",
+        "parameters": {"memory_mb": 512},
+    })
+    assert response.status_code == 422
+    assert "128 MB server/request budget" in response.json()["detail"]
+
+
+def test_configured_concurrency_rejects_additional_job(monkeypatch):
+    import api.main as api
+
+    monkeypatch.setattr(api, "MAX_CONCURRENT_JOBS", 1)
+    monkeypatch.setattr(api, "active", 1)
+    response = client.post("/api/v1/analyze", json={
+        "aoi": [100.8, 2.7, 100.85, 2.75], "scene_id": "test-only-scene",
+    })
+    assert response.status_code == 429
+    assert "concurrency limit" in response.json()["detail"]
+
+
+def test_memory_result_cache_can_be_disabled_or_bounded(monkeypatch):
+    import api.main as api
+
+    monkeypatch.setattr(api, "cache", {})
+    monkeypatch.setattr(api, "RESULT_CACHE_ENTRIES", 0)
+    api._remember_result("first", (None, {}))
+    assert not api.cache
+    monkeypatch.setattr(api, "RESULT_CACHE_ENTRIES", 1)
+    api._remember_result("first", (None, {}))
+    api._remember_result("second", (None, {}))
+    assert set(api.cache) == {"second"}

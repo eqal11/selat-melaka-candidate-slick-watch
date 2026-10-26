@@ -1,4 +1,5 @@
 import math
+import os
 
 import dask
 import dask.array as da
@@ -28,9 +29,13 @@ def metric_grid(bbox, resolution):
 def check_budget(width, height, params):
     # 96 bytes/output pixel covers detector float64 temporaries + masks + dask source.
     estimated = width * height * 96 + 32 * 1024**2
-    if estimated > params.memory_mb * 1024**2:
+    server_budget = int(os.getenv("ANALYSIS_MEMORY_MB", "512"))
+    if not 64 <= server_budget <= 512:
+        raise ValueError("ANALYSIS_MEMORY_MB must be between 64 and 512")
+    budget = min(params.memory_mb, server_budget)
+    if estimated > budget * 1024**2:
         raise MemoryError(
-            f"Estimated working memory {estimated / 1024**2:.0f} MB exceeds {params.memory_mb} MB; choose 40 m resolution or a smaller AOI"
+            f"Estimated working memory {estimated / 1024**2:.0f} MB exceeds {budget} MB server/request budget; choose 40 m resolution or a smaller AOI"
         )
     return estimated
 

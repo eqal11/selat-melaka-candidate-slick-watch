@@ -1,0 +1,26 @@
+# Trial only: real SAR processing on 512 MB has not been verified.
+services:
+  - type: web
+    name: selat-melaka-api
+    runtime: docker
+    branch: master
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: APP_DATA_DIR
+        value: /app/var
+      - key: CORS_ORIGINS
+        value: http://localhost:5174,http://127.0.0.1:5174
+      - key: ANALYSIS_MEMORY_MB
+        value: "128"
+      - key: MAX_CONCURRENT_JOBS
+        value: "1"
+      - key: RESULT_CACHE_ENTRIES
+        value: "0"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"

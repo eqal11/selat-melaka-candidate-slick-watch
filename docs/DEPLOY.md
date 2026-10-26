@@ -2,6 +2,21 @@
 
 Deployments have not been created or verified. Use accounts and secrets you control. Deployments and external connectivity were not verified in this run.
 
+## Render Free backend trial
+
+Hugging Face now requires a paid plan to create Docker Spaces. Do not select Gradio as a direct substitute for the existing Dockerfile. Official policy: https://huggingface.co/docs/hub/spaces-overview
+
+Render Free is an alternative trial with 512 MB RAM and 0.1 CPU, not a verified production deployment. No claim is made that it can process a 50 x 50 km SAR AOI or meet the three-minute target. See https://render.com/docs/free and https://render.com/docs/compute-plans .
+
+1. Push the latest commits, including `render.yaml`, to GitHub.
+2. Sign into https://dashboard.render.com using GitHub. Create a **Blueprint**, select this repository and the `master` branch, and use `render.yaml` at the repository root. The plan must show **Free** before creation.
+3. The blueprint builds the root Dockerfile, uses port 8000 and checks `/health`. It sets one active analysis, an estimated 128 MB working-array budget, no retained in-memory result cache, and one numerical-library thread. The 128 MB estimate excludes interpreter/library overhead and is not a total RAM guarantee. Detector thresholds and scientific parameters are unchanged.
+4. Wait for **Live**, then open the service's actual public URL followed by `/health`, `/docs`, `/api/v1/zones` and `/api/v1/validation/cases`. No deployment success is claimed until these return successfully.
+5. Deploy Vercel as below using this service URL for `VITE_API_URL`. Set Render's `CORS_ORIGINS` to the exact Vercel HTTPS origin and redeploy the backend.
+6. Begin with a small AOI (for example 10 x 10 km). The API rejects requests exceeding its configured estimated memory budget with HTTP 422 before scene search. Check the real job outcome and same-scene SAR overlay. Larger analysis may fail or be rejected; there is no substitute result.
+
+Render Free sleeps after 15 idle minutes and can take about one minute to wake. SQLite/cache is lost on sleep, restart or redeploy; the committed archive stays in Git. Large outbound imagery traffic may trigger free-service restrictions. No AIS key is required for deployment; add it server-side only if needed. Docker build and hosted memory/performance remain unverified because the local Docker Linux engine is not running and no Render service has been created.
+
 ## Frontend on Vercel
 
 1. Push this repository to GitHub and import it as a new Vercel project.
@@ -14,7 +29,7 @@ Vercel's Vite guidance: https://vercel.com/docs/frameworks/frontend/vite
 
 ## Backend on Hugging Face Spaces
 
-1. Create a Docker Space in an account or organization you control.
+1. Docker Space creation currently requires a paid account plan. Proceed only if you choose that cost; this is not a free-hosting instruction. Create a Docker Space in an account or organization you control.
 2. Push the repository contents to the Space. The root Dockerfile builds the API; the Spaces metadata is already at the top of README.md with sdk: docker and app_port: 8000.
 3. In Space settings, add CORS_ORIGINS as the exact Vercel origin, APP_DATA_DIR=/app/var, and optionally AISSTREAM_API_KEY as a server-side secret.
 4. Wait for the Docker build, then verify /health and /docs on the Space URL.

@@ -28,6 +28,7 @@ from websockets.asyncio.client import connect
 from core import conditions
 from core.config import ROOT, Zones, zones
 from core.engine import analyze, cache_key, write_result
+from core.loading import check_budget, metric_grid
 from core.models import (
     AnalyzeRequest,
     ArchiveGeoJSON,
@@ -47,6 +48,8 @@ from core.scenes import search
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("selat-watch")
+MAX_CONCURRENT_JOBS = max(1, min(2, int(os.getenv("MAX_CONCURRENT_JOBS", "2"))))
+RESULT_CACHE_ENTRIES = max(0, min(8, int(os.getenv("RESULT_CACHE_ENTRIES", "2"))))
 VALIDATION_PROCESSING_VERSION = 3
 VAR = Path(os.getenv("APP_DATA_DIR", str(Path(__file__).parent / "var")))
 VAR.mkdir(parents=True, exist_ok=True)
@@ -54,6 +57,7 @@ DB = VAR / "jobs.sqlite3"
 RESULTS = VAR / "results"
 ARCHIVE = ROOT / "data" / "archive"
 lock = threading.Lock()
+cache_lock = threading.Lock()
 active = 0
 jobs: dict[str, dict[str, Any]] = {}
 cache: dict[str, tuple[Result, dict[str, bytes]]] = {}
@@ -86,9 +90,20 @@ def _assets_for(key: str) -> dict[str, bytes]:
     }
 
 
+def _remember_result(key, pair):
+    with cache_lock:
+        if RESULT_CACHE_ENTRIES == 0:
+            return
+        cache.pop(key, None)
+        cache[key] = pair
+        while len(cache) > RESULT_CACHE_ENTRIES:
+            cache.pop(next(iter(cache)))
+
+
 def get_result(key: str):
-    if key in cache:
-        return cache[key]
+    with cache_lock:
+        if key in cache:
+            return cache[key]
     with db() as connection:
         row = connection.execute(text("SELECT result FROM cache WHERE key=:key"), {"key": key}).fetchone()
     path = RESULTS / f"{key}.json"
@@ -99,7 +114,7 @@ def get_result(key: str):
     else:
         return None
     pair = (result, _assets_for(key))
-    cache[key] = pair
+    _remember_result(key, pair)
     return pair
 
 
@@ -120,7 +135,7 @@ def update_job(job_id, **updates):
 def run_job(job_id, body):
     global active
     with lock:
-        if active >= 2:
+        if active >= MAX_CONCURRENT_JOBS:
             update_job(job_id, status="failed", stage="failed", error="Analysis concurrency limit reached")
             return
         active += 1
@@ -172,7 +187,7 @@ def run_job(job_id, body):
                     text("INSERT OR REPLACE INTO cache (key, result) VALUES (:key,:result)"),
                     {"key": result.id, "result": result.model_dump_json()},
                 )
-        cache[result.id] = (result, assets)
+        _remember_result(result.id, (result, assets))
         update_job(job_id, status="completed", stage="complete", progress=100, result_id=result.id)
     except Exception as exc:
         log.exception("Real scene analysis failed (%s)", type(exc).__name__)
@@ -327,9 +342,14 @@ def scenes(request: Request, bbox: str, start: datetime, end: datetime):
 @app.post("/api/v1/analyze", response_model=Job, status_code=202)
 @limiter.limit("5/minute")
 def submit(request: Request, body: AnalyzeRequest, background: BackgroundTasks):
+    try:
+        _, _, width, height = metric_grid(body.aoi, body.parameters.resolution_m)
+        check_budget(width, height, body.parameters)
+    except MemoryError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     with lock:
-        if active >= 2:
-            raise HTTPException(429, "Two analyses are already running")
+        if active >= MAX_CONCURRENT_JOBS:
+            raise HTTPException(429, f"Analysis concurrency limit reached ({MAX_CONCURRENT_JOBS})")
     job_id = secrets.token_urlsafe(12)
     jobs[job_id] = {
         "id": job_id,
