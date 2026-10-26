@@ -8,7 +8,7 @@ Deployments have not been created or verified. Use accounts and secrets you cont
 2. Set the project root directory to web. Vercel should detect Vite; build with npm run build and publish dist.
 3. Add VITE_API_URL as the public HTTPS base URL for the API, with no trailing slash.
 4. Add the exact Vercel deployment origin to the backend CORS_ORIGINS setting.
-5. Deploy, then check the browser console, API health URL, map tiles, and the offline demo flow.
+5. Deploy, then check the browser console, API health URL, map tiles, and the real Sentinel-1 analysis and SAR preview.
 
 Vercel's Vite guidance: https://vercel.com/docs/frameworks/frontend/vite
 
@@ -40,4 +40,3 @@ The free Space filesystem may be ephemeral. SQLite is only cache/job state; dura
 - Hugging Face account and Docker Space for the API.
 - Optional aisstream.io key, stored in backend secrets only. A key alone will not activate AIS until the relay implementation exists.
 - No Planetary Computer user key is configured by this repository. Real STAC metadata search worked anonymously in this verification run; asset signing and data access succeeded for the archived RTC scene.
-

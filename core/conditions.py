@@ -40,19 +40,20 @@ def fetch(lon, lat, when):
         "start_date": when.date().isoformat(),
         "end_date": when.date().isoformat(),
     }
+    wind_api = (
+        "https://archive-api.open-meteo.com/v1/archive"
+        if past > 5
+        else "https://api.open-meteo.com/v1/forecast"
+    )
+    current_api = "https://marine-api.open-meteo.com/v1/marine"
     try:
-        url = (
-            "https://archive-api.open-meteo.com/v1/archive"
-            if past > 5
-            else "https://api.open-meteo.com/v1/forecast"
-        )
-        weather = get_json(url, {**params, "hourly": "wind_speed_10m,wind_direction_10m"})
+        weather = get_json(wind_api, {**params, "hourly": "wind_speed_10m,wind_direction_10m"})
         wu, wv = interpolate(weather["hourly"], "wind_speed_10m", "wind_direction_10m", when, True)
     except (RuntimeError, KeyError, ValueError):
         flags.append("wind_unavailable")
     try:
         marine = get_json(
-            "https://marine-api.open-meteo.com/v1/marine",
+            current_api,
             {**params, "cell_selection": "sea", "hourly": "ocean_current_velocity,ocean_current_direction"},
         )
         cu, cv = interpolate(marine["hourly"], "ocean_current_velocity", "ocean_current_direction", when)
@@ -71,4 +72,6 @@ def fetch(lon, lat, when):
         current_u_ms=cu,
         current_v_ms=cv,
         flags=flags,
+        wind_api=wind_api,
+        current_api=current_api,
     )

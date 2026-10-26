@@ -1,11 +1,11 @@
 # Build plan
 
-1. Core: validated configuration, bounded AOI reads, masks, detector, scoring, drift; numerical tests.
-2. API: typed contracts, bounded jobs/cache, preview, archive/history, live conditions/AIS.
-3. Validation: measured synthetic experiments and transparent real-data access/coverage report.
-4. Pipeline: transactional idempotent ingestion and small durable archives.
-5. Frontend: map, offline demo, analysis, history/live, exports and methodology.
-6. CI and deployment: pinned dependencies, lint/types/unit/browser gates, Docker Compose.
-7. Documentation: verified results, screenshots, decisions, deployment and remaining manual checks.
+1. Shared processing core: scene discovery, bounded AOI reads, preprocessing, masks, candidate detector, scoring and drift.
+2. API: validated real-scene contracts, background jobs, cache, review assets, archive/history and live conditions.
+3. Validation: test-only synthetic numerical fixtures, verified public incident searches and explicitly reported real-scene measurements.
+4. Pipeline: idempotent ingestion of real scenes with paired small SAR previews.
+5. Frontend: real-scene map, image verification, history/live, exports and methodology.
+6. CI and deployment: pinned dependencies, Python/TypeScript lint and type checks, tests, Docker Compose.
+7. Documentation: measured results, actual-scene screenshots, decisions, deployment steps and remaining gaps.
 
-Real scenes and external services will only be described as verified after actual successful requests. Performance targets are targets until benchmarked.
+Only actual external requests and measured outputs are called verified. Hosting, broad accuracy and performance targets remain unverified until measured.

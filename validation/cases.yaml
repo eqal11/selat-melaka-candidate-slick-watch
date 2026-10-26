@@ -1,7 +1,3 @@
-# No real spill incidents included because date, location, and extent were not independently verified.
+version: 1
+# Verified incident records and scene matching are documented in incidents.yaml.
 cases: []
-placeholders:
-  - status: PLACEHOLDER
-    description: Add a Strait of Malacca case only after reliable public verification.
-    required_fields: [name, date_utc, location, extent, source_urls]
-

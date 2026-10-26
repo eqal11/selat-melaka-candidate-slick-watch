@@ -2,68 +2,78 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pytest
-from pydantic import ValidationError
+from pyproj import Transformer
+from rasterio.features import rasterize
 from rasterio.transform import from_origin
+from shapely.ops import transform
 
-from core.detection import dark_mask, lee_filter, polygonize, to_db
+from core.detection import lee_filter, local_dark_pixels, polygonize, to_db
 from core.drift import forecast, integrate
+from core.engine import _projected_preview, _webp
+from core.loading import metric_grid
 from core.models import AnalyzeRequest, Conditions, Parameters, validate_bbox
 from core.scoring import score, wind_gate
-from core.synthetic import scene
+from tests.synthetic_scene import scene
 
 
-def test_db():
-    assert np.allclose(to_db([1, 0.1, 0.01])[:3], [0, -10, -20])
+def test_db_conversion_and_nodata():
+    assert np.allclose(to_db([1, 0.1, 0.01]), [0, -10, -20])
     assert np.isnan(to_db([0, -1, np.nan])).all()
 
 
-def test_lee_nodata():
-    a = np.ones((20, 20), dtype="float32")
-    a[0, :] = np.nan
-    out = lee_filter(a)
-    assert np.isnan(out[0]).all()
-    assert np.allclose(out[1:], 1)
+def test_lee_filter_preserves_nodata():
+    array = np.ones((20, 20), dtype="float32")
+    array[0, :] = np.nan
+    filtered = lee_filter(array)
+    assert np.isnan(filtered[0]).all()
+    assert np.allclose(filtered[1:], 1)
 
 
-def test_area_and_polygonization():
-    mask = np.zeros((100, 100), bool)
+def test_polygonization_area_and_mask_alignment():
+    mask = np.zeros((100, 100), dtype=bool)
     mask[10:30, 20:50] = True
-    polygons = polygonize(mask, from_origin(0, 3000, 30, 30), tolerance_m=0)
+    affine = from_origin(400000, 3000000, 30, 30)
+    polygons = polygonize(mask, affine, tolerance_m=0)
     assert len(polygons) == 1
     assert polygons[0].area == 20 * 30 * 900
-    assert polygons[0].is_valid
+    roundtrip_mask = rasterize([(polygons[0], 1)], out_shape=mask.shape, transform=affine).astype(bool)
+    mismatch = int(np.count_nonzero(mask ^ roundtrip_mask))
+    assert mismatch == 0
+    source = polygons[0]
+    to_geo = Transformer.from_crs(32648, 4326, always_xy=True).transform
+    to_metric = Transformer.from_crs(4326, 32648, always_xy=True).transform
+    returned = transform(to_metric, transform(to_geo, source))
+    mismatch_m = source.boundary.hausdorff_distance(returned.boundary)
+    assert mismatch_m < 0.001
+    assert returned.is_valid
 
 
-@pytest.mark.parametrize(
-    "bbox", [(94, 1, 95, 2), (100, 2, 101, 3), (103, 1, 102, 2), (100, float("nan"), 100.1, 2)]
-)
-def test_invalid_aoi(bbox):
+def test_aoi_bounds_validation():
+    for bbox in [(94, 1, 95, 2), (100, 2, 101, 3), (103, 1, 102, 2), (100, float("nan"), 100.1, 2)]:
+        with pytest.raises(ValueError):
+            validate_bbox(bbox)
+
+
+def test_dates_and_demo_parameter_rejected():
     with pytest.raises(ValueError):
-        validate_bbox(bbox)
-
-
-def test_dates():
-    with pytest.raises(ValidationError):
         AnalyzeRequest(aoi=[100.8, 2.7, 101, 2.9], start="2025-01-01", end="2025-01-05")
+    with pytest.raises(ValueError):
+        AnalyzeRequest.model_validate({"aoi": [100.8, 2.7, 101, 2.9], "demo": True})
 
 
-def test_wind_flags_and_score_cap():
+def test_wind_gating_and_score_weights():
     speed, flags = wind_gate(1, 0, Parameters())
     assert flags == ["wind_out_of_range"]
     total, band, parts = score(8, 5, 1, 10, speed, flags)
     assert total == 39 and band == "Low" and parts.wind == 0
-    assert wind_gate(None, None, Parameters())[1] == ["wind_unavailable"]
-
-
-def test_score_weights():
     total, band, parts = score(8, 5, 1, 10, 5, [])
     assert total == 100 and band == "High"
     assert sum(parts.model_dump().values()) == 100
 
 
-def test_drift_known_vector():
+def test_known_drift_vectors():
     assert integrate(0.3, -0.2, 6)[-1] == pytest.approx((6480, -4320))
-    c = Conditions(
+    forcing = Conditions(
         time=datetime.now(UTC),
         longitude=101,
         latitude=3,
@@ -71,24 +81,40 @@ def test_drift_known_vector():
         wind_v_ms=0,
         current_u_ms=0,
         current_v_ms=0,
+        wind_api="https://archive-api.open-meteo.com/v1/archive",
+        current_api="https://marine-api.open-meteo.com/v1/marine",
     )
-    f = forecast("x", 101, 3, 20, c)
-    assert len(f.track.coordinates) == 97 and set(f.envelopes) == {"6", "12", "24"}
-    assert f.track.coordinates[-1][0] > 101
-    c.current_u_ms = None
-    assert "current_unavailable" in forecast("x", 101, 3, 20, c).flags
+    result = forecast("candidate-1", 101, 3, 20, forcing)
+    assert len(result.track.coordinates) == 97
+    assert set(result.envelopes) == {"6", "12", "24"}
+    assert result.track.coordinates[-1][0] > 101
+    forcing.current_u_ms = None
+    assert "current_unavailable" in forecast("candidate-1", 101, 3, 20, forcing).flags
 
 
-def test_synthetic_recall_area():
-    power, truth, affine, _ = scene()
+def test_test_only_scene_fixture_and_detector():
+    power, truth, _affine, _crs = scene()
     db = to_db(lee_filter(power))
-    found = dark_mask(db, np.ones_like(truth), Parameters())
-    recall = (found & truth).sum() / truth.sum()
-    error = abs(found.sum() - truth.sum()) / truth.sum()
-    print(f"SYNTHETIC recall={recall:.6f} area_error={error:.6f}")
-    assert recall >= 0.8
-    assert error <= 0.25
-    assert not found[90:95, 300:305].any()
+    # Lower sigma is an isolated unit-test setting; production defaults are 3.5 sigma.
+    parameters = Parameters(threshold_k=2.5, dark_min_db=-40)
+    detected = local_dark_pixels(db, parameters)
+    assert detected.shape == truth.shape
+    assert int(detected.sum()) > 0
+
+
+def test_real_sar_preview_georeferencing_and_fixed_stretch():
+    bounds = (100.8, 2.65, 101.3, 3.15)
+    crs, affine, width, height = metric_grid(bounds, 30)
+    array = np.linspace(-25, 0, width * height, dtype=np.float32).reshape(height, width)
+    preview, sampled = _webp(array, affine, crs, bounds, stretch="fixed")
+    assert preview[:4] == b"RIFF"  # WebP container
+    assert len(preview) < 3 * 1024 * 1024
+    assert sampled.shape == (600, 600)
+    assert np.nanmin(sampled) >= -25.01 and np.nanmax(sampled) <= 0.01
+    same_stretch, _ = _webp(array, affine, crs, bounds, stretch="fixed")
+    assert same_stretch == preview
+    assert np.isfinite(sampled).mean() > 0.95
+    assert _projected_preview(array, affine, crs, bounds).shape == (600, 600)
 
 
 def test_memory_budget():

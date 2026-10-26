@@ -1,0 +1,63 @@
+version: 1
+scope: "Oil spill incidents documented in or immediately adjacent to the Malacca Strait, Johor Strait, and Singapore Strait. Surface extent is recorded only when a source states a measured extent; released volume is not used as a slick footprint."
+incidents:
+  - id: apl-denver-wan-hai-301-2017
+    status: verified_incident
+    date_local: "2017-01-03T23:50:00+08:00"
+    date_utc: "2017-01-03T15:50:00Z"
+    time_basis: "MPA notification time; the source does not give a precise collision time."
+    location: "Off Pasir Gudang Port, Johor; MPA also reported oil patches off western Pulau Ubin."
+    extent: null
+    extent_note: "No georeferenced water-surface slick polygon or measured surface area found in the cited reports. MPA reported approximately 300 tonnes spilled; that volume is not an extent."
+    sources:
+      - organization: "Maritime and Port Authority of Singapore"
+        url: "https://www.mpa.gov.sg/media-centre/details/collision-of-container-vessels-wan-hai-301-and-apl-denver"
+      - organization: "Reuters (reprinted by gCaptain)"
+        url: "https://gcaptain.com/bunker-spill-after-containerships-collide-in-east-johor-straits-near-singapore/"
+    scene_search:
+      aoi_bbox_wgs84: [103.7, 1.05, 104.2, 1.5]
+      requested_window_utc: ["2016-12-31T15:50:00Z", "2017-01-06T15:50:00Z"]
+      result: "No suitable Sentinel-1 RTC or GRD scene returned by Microsoft Planetary Computer STAC for the AOI and date window."
+      detector_run: false
+  - id: pasir-panjang-2024
+    status: verified_incident
+    date_local: "2024-06-14T14:18:00+08:00"
+    date_utc: "2024-06-14T06:18:00Z"
+    location: "Pasir Panjang Terminal, Singapore; subsequent shoreline impact included Singapore's southern and eastern coasts."
+    extent: null
+    extent_note: "No georeferenced water-surface slick polygon or measured slick area found. ITOPF reports shoreline impact length; the shore length is not an offshore slick footprint."
+    sources:
+      - organization: "Maritime and Port Authority of Singapore"
+        url: "https://www.mpa.gov.sg/media-centre/details/oil-spill-clean-up-in-progress-at-pasir-panjang-terminal"
+      - organization: "ITOPF"
+        url: "https://www.itopf.org/in-action/case-studies/marine-honour-singapore-2024/"
+    scene_search:
+      aoi_bbox_wgs84: [103.55, 1.1, 104.05, 1.55]
+      requested_window_utc: ["2024-06-11T06:18:00Z", "2024-06-17T06:18:00Z"]
+      result: "A real Sentinel-1 RTC VV scene was returned by STAC and processed. Detector found zero candidates; the reported event has no georeferenced slick extent, so distance and IoU are not measurable."
+      acquisition_time_utc: "2024-06-14T11:25:55.503017Z"
+      candidate_count: 0
+      time_gap: "5 hours 7 minutes 55 seconds after the 2024-06-14T06:18:00Z event time."
+      distance_to_documented_location: "Not computed: no source-verified point/polygon geometry."
+      overlap_iou: "Not computed: no source-verified slick footprint."
+      scene_id: "S1A_IW_GRDH_1SDV_20240614T112543_20240614T112608_054318_069B9C_rtc"
+      detector_run: true
+  - id: tanjung-langsat-pulau-ubin-2025
+    status: verified_incident
+    date_local: "2025-04-03T19:10:00+08:00"
+    date_utc: "2025-04-03T11:10:00Z"
+    location: "Oil patch sighted off northeastern Pulau Ubin; source investigation attributed incident to a pipeline leak at Tanjung Langsat Port Terminal, Johor."
+    extent: null
+    extent_note: "No georeferenced water-surface slick polygon or measured surface area found. DOE reported approximately 1.6 m³ released; volume is not an extent."
+    sources:
+      - organization: "Maritime and Port Authority of Singapore"
+        url: "https://www.mpa.gov.sg/media-centre/details/oil-patch-sighted-in-the-eastern-johor-strait-off-the-northeastern-coast-of-pulau-ubin"
+      - organization: "Department of Environment Malaysia"
+        url: "https://www.doe.gov.my/wp-content/uploads/2025/08/KM-4-April-2025.pdf"
+      - organization: "Bernama"
+        url: "https://www.bernama.com/en/news.php?id=2409099"
+    scene_search:
+      aoi_bbox_wgs84: [103.7, 1.05, 104.2, 1.5]
+      requested_window_utc: ["2025-03-31T11:10:00Z", "2025-04-06T11:10:00Z"]
+      result: "No suitable Sentinel-1 RTC or GRD scene returned by Microsoft Planetary Computer STAC for the AOI and date window."
+      detector_run: false

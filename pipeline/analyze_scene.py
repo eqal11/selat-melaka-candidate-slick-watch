@@ -35,7 +35,7 @@ def main() -> None:
         start=None if args.scene_id else now - timedelta(days=14),
         end=None if args.scene_id else now,
     )
-    result, _preview = analyze(request)
+    result, assets = analyze(request)
     result.zone = zone.id
     folder = archive / zone.id / result.acquisition_time.date().isoformat()
     folder.mkdir(parents=True, exist_ok=True)
@@ -43,22 +43,32 @@ def main() -> None:
     feature_collection = ArchiveGeoJSON.model_validate(
         {
             "type": "FeatureCollection",
-            "data_label": "OBSERVATION",
+            "data_label": "REAL Sentinel-1",
             "features": [feature.model_dump(mode="json") for feature in result.candidates.features],
         }
     )
     temporary = target.with_suffix(".tmp")
     temporary.write_text(feature_collection.model_dump_json(), encoding="utf-8")
     temporary.replace(target)
+    (folder / f"{result.id}-raw.webp").write_bytes(assets["preview-raw-fixed.webp"])
+    (folder / f"{result.id}-filtered.webp").write_bytes(assets["preview-filtered-fixed.webp"])
     entry = ArchiveEntry(
         id=result.id,
         zone=zone.id,
         scene_id=result.scene_id,
         acquisition_time=result.acquisition_time,
-        data_label="OBSERVATION",
+        satellite=result.satellite,
+        orbit_direction=result.orbit_direction,
+        polarization=result.polarization,
+        stac_href=result.stac_href,
         count=len(result.candidates.features),
         total_area_km2=result.total_area_km2,
         path=target.relative_to(archive).as_posix(),
+        preview_raw=(folder / f"{result.id}-raw.webp").relative_to(archive).as_posix(),
+        preview_filtered=(folder / f"{result.id}-filtered.webp").relative_to(archive).as_posix(),
+        preview_bounds=result.preview_bounds,
+        scene_footprint=result.scene_footprint,
+        coastline=result.coastline,
         qa=result.qa,
     )
     index.entries = [existing for existing in index.entries if existing.scene_id != result.scene_id]

@@ -42,11 +42,18 @@ class Model(BaseModel):
 class Parameters(Model):
     resolution_m: int = Field(30, ge=20, le=40)
     window_pixels: int = Field(51, ge=15, le=151)
-    threshold_k: float = Field(1.0, ge=0.5, le=4)
-    min_area_km2: float = Field(0.025, ge=0.005, le=5)
+    threshold_k: float = Field(3.5, ge=2.5, le=4.5)
+    min_area_km2: float = Field(0.03, ge=0.005, le=5)
+    max_area_km2: float = Field(10.0, ge=0.1, le=50)
+    min_contrast_db: float = Field(3.0, ge=1, le=15)
+    min_compactness: float = Field(0.005, ge=0, le=0.5)
+    max_elongation: float = Field(15.0, ge=2, le=100)
     dark_min_db: float = Field(-35, ge=-50, le=-20)
     dark_max_db: float = Field(-17, ge=-25, le=-10)
-    coastal_buffer_m: int = Field(1500, ge=1000, le=2000)
+    coastal_buffer_m: int = Field(2500, ge=2000, le=3000)
+    port_buffer_m: int = Field(3000, ge=500, le=10000)
+    bright_target_db: float = Field(-5, ge=-20, le=0)
+    ship_halo_m: int = Field(300, ge=60, le=1000)
     wind_min_ms: float = Field(2, ge=0, le=8)
     wind_max_ms: float = Field(10, ge=8, le=20)
     memory_mb: int = Field(384, ge=64, le=512)
@@ -55,7 +62,11 @@ class Parameters(Model):
     def ordered(self):
         if self.window_pixels % 2 != 1:
             raise ValueError("window_pixels must be odd")
-        if self.dark_min_db >= self.dark_max_db or self.wind_min_ms >= self.wind_max_ms:
+        if (
+            self.dark_min_db >= self.dark_max_db
+            or self.wind_min_ms >= self.wind_max_ms
+            or self.min_area_km2 >= self.max_area_km2
+        ):
             raise ValueError("Parameter bounds must be increasing")
         return self
 
@@ -65,7 +76,6 @@ class AnalyzeRequest(Model):
     start: datetime | None = None
     end: datetime | None = None
     scene_id: str | None = Field(None, max_length=200, pattern=r"^[\w.:-]+$")
-    demo: bool = False
     parameters: Parameters = Field(default_factory=Parameters)
 
     @field_validator("aoi")
@@ -80,8 +90,6 @@ class AnalyzeRequest(Model):
 
     @model_validator(mode="after")
     def dates(self):
-        if self.demo:
-            return self
         if not self.scene_id and (not self.start or not self.end):
             raise ValueError("Provide scene_id or both start and end")
         if (self.start is None) != (self.end is None):
@@ -97,7 +105,7 @@ class AnalyzeRequest(Model):
 
 
 class Geometry(Model):
-    type: Literal["Point", "LineString", "Polygon", "MultiPolygon"]
+    type: Literal["Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"]
     coordinates: Any
 
     @model_validator(mode="after")
@@ -122,7 +130,7 @@ class Breakdown(Model):
 class CandidateProperties(Model):
     id: str
     label: Literal["candidate"] = "candidate"
-    data_label: Literal["SYNTHETIC", "OBSERVATION"]
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     acquisition_time: datetime
     area_km2: float = Field(gt=0)
     perimeter_km: float = Field(gt=0)
@@ -151,7 +159,7 @@ class Candidate(Model):
 
 class Candidates(Model):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    features: list[Candidate] = Field(max_length=500)
+    features: list[Candidate]
 
 
 class DriftForecast(Model):
@@ -171,7 +179,10 @@ class Conditions(Model):
     current_u_ms: float | None
     current_v_ms: float | None
     flags: list[str] = Field(default_factory=list)
-    data_label: Literal["SYNTHETIC", "MODEL"] = "MODEL"
+    wind_source: str = "Open-Meteo"
+    wind_api: str
+    current_source: str = "Open-Meteo Marine"
+    current_api: str
     _utc_time = field_validator("time")(utc)
 
 
@@ -185,16 +196,34 @@ class QA(Model):
     software_version: str
     working_resolution_m: int
     flags: list[str]
+    funnel: dict[str, int]
+    raster_bounds_offset_m: float = Field(ge=0)
+    stac_footprint_overlap_percent: float = Field(ge=0, le=100)
+
+
+class OpticalScene(Model):
+    id: str
+    acquisition_time: datetime
+    cloud_percent: float = Field(ge=0, le=100)
+    stac_href: str
+    _utc_time = field_validator("acquisition_time")(utc)
 
 
 class Result(Model):
     id: str
     scene_id: str
+    satellite: Literal["S1A", "S1B", "S1C", "S1D"]
+    orbit_direction: Literal["ASCENDING", "DESCENDING"]
+    polarization: list[str]
+    stac_href: str
     collection: str
+    scene_footprint: Geometry
+    optical_scene: OpticalScene | None = None
+    optical_status: Literal["available", "none", "unavailable"]
     zone: str | None = None
     acquisition_time: datetime
     processed_at: datetime
-    data_label: Literal["SYNTHETIC", "OBSERVATION"]
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     aoi: tuple[float, float, float, float]
     parameters: Parameters
     candidates: Candidates
@@ -203,7 +232,8 @@ class Result(Model):
     qa: QA
     total_area_km2: float = Field(ge=0)
     preview_bounds: tuple[float, float, float, float]
-    preview_url: str | None
+    preview_urls: dict[str, str]
+    coastline: Geometry | None = None
     notice: str = "Candidate detection, not confirmed spill. Educational and research use only; not for operational, legal or emergency decisions."
     _utc_times = field_validator("acquisition_time", "processed_at")(utc)
 
@@ -213,9 +243,39 @@ class Result(Model):
         return validate_bbox(v)
 
 
+class PixelResponse(Model):
+    longitude: float = Field(ge=-180, le=180)
+    latitude: float = Field(ge=-90, le=90)
+    variant: Literal["raw", "filtered"]
+    backscatter_db: float | None
+    resolution_m: float = Field(gt=0)
+    scene_id: str
+
+
+class ProfileSample(Model):
+    longitude: float = Field(ge=-180, le=180)
+    raw_db: float | None
+    filtered_db: float | None
+    inside: bool
+
+
+class ProfileResponse(Model):
+    result_id: str
+    candidate_id: str
+    scene_id: str
+    samples: list[ProfileSample]
+    mean_inside_db: float
+    mean_ring_db: float
+    profile_note: str
+
+
 class Scene(Model):
     id: str
     collection: str
+    satellite: Literal["S1A", "S1B", "S1C", "S1D"]
+    orbit_direction: Literal["ASCENDING", "DESCENDING"]
+    polarization: list[str]
+    stac_href: str
     acquisition_time: datetime
     footprint: Geometry
     flags: list[str]
@@ -228,7 +288,7 @@ class SceneList(Model):
 
 
 class Job(Model):
-    data_label: Literal["SYNTHETIC", "OBSERVATION"] | None = None
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     id: str
     status: Literal["queued", "running", "completed", "failed", "cancelled"]
     stage: str
@@ -242,12 +302,21 @@ class ArchiveEntry(Model):
     id: str
     zone: str
     scene_id: str
+    satellite: Literal["S1A", "S1B", "S1C", "S1D"]
+    orbit_direction: Literal["ASCENDING", "DESCENDING"]
+    polarization: list[str]
+    stac_href: str
     acquisition_time: datetime
-    data_label: Literal["SYNTHETIC", "OBSERVATION"]
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     count: int = Field(ge=0)
     total_area_km2: float = Field(ge=0)
     path: str
-    qa: QA | None = None
+    preview_raw: str
+    preview_filtered: str
+    preview_bounds: tuple[float, float, float, float] | None = None
+    scene_footprint: Geometry | None = None
+    coastline: Geometry | None = None
+    qa: QA
     _utc_time = field_validator("acquisition_time")(utc)
 
 
@@ -258,13 +327,13 @@ class ArchiveIndex(Model):
 
 class ArchiveGeoJSON(Model):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    data_label: Literal["SYNTHETIC", "OBSERVATION"]
-    features: list[Candidate] = Field(max_length=500)
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
+    features: list[Candidate]
 
 
 class HistoryResponse(Model):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    data_label: Literal["SYNTHETIC", "OBSERVATION"]
+    data_label: Literal["REAL Sentinel-1"] = "REAL Sentinel-1"
     entries: list[ArchiveEntry]
 
 
