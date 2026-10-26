@@ -1,0 +1,15 @@
+services:
+  api:
+    build: { context: ., dockerfile: api/Dockerfile }
+    ports: ["8000:8000"]
+    environment:
+      APP_DATA_DIR: /app/var
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY:-}
+    volumes: ["api-cache:/app/var"]
+  web:
+    build: { context: web, dockerfile: Dockerfile }
+    ports: ["5173:80"]
+    depends_on: [api]
+volumes:
+  api-cache:

@@ -1,0 +1,26 @@
+name: Daily archive ingestion
+on:
+  schedule: [{cron: '23 2 * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run python -m pipeline.ingest
+      - name: Commit successful archive updates
+        run: |
+          if [[ -n "$(git status --porcelain data/archive)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/archive
+            git commit -m "data: archive new candidate scene results"
+            git push
+          fi
+
