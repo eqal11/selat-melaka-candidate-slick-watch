@@ -1,6 +1,57 @@
+# Final hardening pass — 2026-10-26
+
+## Connectivity and real-case processing status
+
+The command `.venv\Scripts\python.exe -m pipeline.run_validation --dry-run` attempted six endpoints: Planetary Computer STAC, Copernicus Data Space STAC, Copernicus Data Space OData, ASF search, Open-Meteo forecast, and Open-Meteo Marine. **No endpoint returned an HTTP status.** Every request failed before a response with `ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))`. The measured errors are saved in `validation/results/connectivity-latest.json`; the dry-run exited 1.
+
+No case catalog search or scene processing was performed in this pass. None of the nine incident/seep cases has a new scene match or detector result from this pass; this is not evidence that no matching scenes exist. The validation runner queries Planetary Computer STAC, Copernicus STAC and ASF when numeric source coordinates are present, but does not process global case AOIs. Cases without published numeric source coordinates are left unsearched. Therefore the requested 5 incident + 4 seep detection rate, distances, funnel, per-case wind, reported-extent comparison and misses are **not measured**. Manual-run instructions and this limitation are in `docs/RUN_LOCALLY.md`.
+
+## Detector change and measurements
+
+Changed `/core` so dark components rejected by the area, contrast, shape or large-smooth-region tests remain as `filtered` GeoJSON features with reason codes. Wind-out-of-range and wind-unavailable components are also retained as `filtered` features. Accepted candidate counts and area exclude filtered features. Filtered features receive a score breakdown scaled to a maximum score of 19 and are hidden by default; the UI has an explicit “Show filtered-out dark areas” toggle. Parameters were **not tuned**. Defaults remain 3.5 local standard deviations, 0.03–10 km², 3 dB minimum contrast, 2.5 km coast buffer, and 2–10 m/s wind.
+
+The regression test for a below-minimum-area component confirms one filtered polygon, reason `area_out_of_range`, and zero accepted candidates. This is a synthetic unit test under `/tests`, not a real-scene measurement. The 23 archived results and their earlier counts predate this code path and were not reprocessed because external asset access failed. Thus the **after-hardening count/density per scene is unverified**. Historical measurements below are retained as the prior archive baseline, not an after result.
+
+For the 2 October 2026 cached scene, the previously stored result reports scene-center Open-Meteo wind components `u=1.2146 m/s`, `v=-2.2146 m/s` (magnitude **2.526 m/s**), timestamp `2026-10-02T11:33:32.922228Z`; source: Open-Meteo Archive API. This is a cached value at the AOI center (101.05°E, 2.9°N), **not** wind at the visually identified irregular dark feature, and not a second independent source. A feature-specific centroid, extent, inside/ring dB, two-source wind, profile, crops, or exact rejection stage cannot be measured from that result: the cache only records the final two accepted polygons, coarse funnel counts, and a decimated preview grid; the original detector-resolution raster and rejected component masks were not persisted. The old funnel has two components after its area filter, so it does not identify what happened to the visually described feature. No cause or feature measurement is inferred.
+
+## UI, screenshots and performance
+
+The user-facing title now describes a SAR candidate slick review tool. Added the plain-language reading guide, visible filtered-feature toggle, checklist JSON/CSV export, reason-coded rows, lazy-loaded validation register, weekly candidate-density chart, 60-day scene-coverage calendar, wind/current vector arrows, and a print stylesheet that includes the map and result details. The score remains a heuristic. Two Playwright tests passed serially in **16.6 seconds total**: the validation-register flow and the real-scene SAR/candidate review flow for the configured `S1D_IW_GRDH_1SDV_20261002T113320_20261002T113345_004836_009162_rtc` scene. The real-scene browser flow replayed a real cached API result; it did not verify a fresh network download or rerun the detector. It regenerated the three screenshots under `docs/screenshots/` from that real scene. No first-load broadband benchmark, uncached 50×50 km analyze duration, or 300-polygon frame-rate measurement was made.
+
+Build output now separates the main UI (267.22 kB minified), charts (406.12 kB), drift component (1.97 kB wrapper), validation register (1.70 kB), deck.gl (772.80 kB), and MapLibre (937.26 kB). The app code is split, but Vite still emits a >500 kB warning for the two vendor chunks; this performance gate is not met.
+
+## Quality, security and deployment checks
+
+- `python -m pytest -q`: **16 passed**, 9 dependency deprecation warnings.
+- `ruff check core api pipeline tests`: passed.
+- `mypy --follow-imports=skip --no-incremental core api pipeline`: passed, 20 source files.
+- `cd web; npm run lint`: passed. `npm test -- --run`: **3 passed**. `npm run build` (includes `tsc -b`): passed with the vendor-size warning above.
+- `npm run e2e -- --reporter=line` with `REAL_SCENE_ID` set: **2 passed** (16.7 s total); the actual real-scene flow used the cached result described above.
+- `docker compose config`: passed. `docker compose up --build -d`: not run because Docker Desktop's Linux engine pipe was unavailable (`dockerDesktopLinuxEngine` not found). `act` was not run.
+- `python -m pip_audit`: not run; module is not installed in the environment. `npm audit --audit-level=moderate`: could not obtain advisories because TLS certificate verification failed for `registry.npmjs.org`; no vulnerability count is claimed.
+- Secret scan checked the current working tree and every file blob in **8 git-history commits**; **0 findings**. `.env.example` was excluded by design.
+- `git diff --check`: passed after the final code edits.
+
+The API health response now reports cached Planetary Computer STAC and Open-Meteo reachability checks; these were not reachable in this shell. The AIS websocket relay is implemented with a bounded ring buffer, 30-minute retention, 15-second SSE updates and per-IP throttling, but no AIS key was present to verify it.
+
+The two requested zero-byte legacy placeholder files remain because the execution policy rejected deletion even after filesystem permission was granted. They have no runtime reads, but the cleanup criterion is not met.
+
+## Manual steps still required
+
+1. In a normal terminal with outbound HTTPS, run the exact dry-run and real-run commands in `docs/RUN_LOCALLY.md`. Inspect `validation/results/` and confirm catalog status codes before accepting any case outcome.
+2. Add ASF result querying and case-scoped AOI processing before claiming global validation; rerun all 5 incidents and sample at least 10 real acquisitions per seep area.
+3. Reprocess all 23 archived Strait scenes with the final detector and report revised per-scene candidates and descriptive candidate density.
+4. Configure AISSTREAM_API_KEY on the server and verify the live websocket; the relay is implemented but was not tested with a key. Add a per-job analysis timeout and obtain successful pip/npm audit results.
+5. Remove the two zero-byte placeholder files in a terminal where repository deletion is permitted.
+6. Start Docker Desktop and rerun `docker compose up --build`; then deploy only after the live smoke test and performance gates pass.
+
+**Deployment decision: NO-GO.** The app and offline checks work, but network/catalog validation did not run, the final detector has not been measured on archived real scenes, global cases are not processed, audit and Docker engine checks are incomplete, and the >500 kB vendor warning remains.
+
+---
+
 # Real-data validation report
 
-**Run date:** 2026-10-26 UTC. **Policy:** reported scene metrics below come from actual Sentinel-1 observations and actual API responses. The case register contains source-verified literature/agency incident metadata only; it is not a set of detector outputs. No demo records or synthetic metric values are included. Synthetic numerical fixtures remain under `tests/` only and are excluded from reported measured results.
+**Run date:** 2026-10-26 UTC. **Policy:** reported scene metrics below come from actual Sentinel-1 observations and actual API responses. The case register contains source-verified literature/agency incident metadata only; it is not a set of detector outputs. No synthetic metric values are included. Synthetic numerical fixtures remain under `tests/` only and are excluded from reported measured results.
 
 ## Expanded real-world validation case register (source verification only)
 
@@ -115,9 +166,9 @@ Scene `S1D_IW_GRDH_1SDV_20261002T113320_20261002T113345_004836_009162_rtc` is sh
 
 ![Same real scene in swipe comparison mode](../docs/screenshots/real-scene-swipe.png)
 
-## Legacy empty files blocked by filesystem policy
+## Repository cleanup
 
-The environment rejected deletion of two tracked legacy paths. Their contents are empty (0 bytes), and no app/API/pipeline code reads or serves either one: `docs/screenshots/offline-demo.png` and `web/public/demo-case.json`. The app has no demo route or fallback, and `core/synthetic.py` is removed. Physical deletion of these two zero-byte paths remains not completed because the filesystem sandbox denied it.
+Two zero-byte legacy files were not removed because the workspace rejected file deletion. They contain no runtime content but remain an explicit cleanup item.
 
 ## Known limitations
 

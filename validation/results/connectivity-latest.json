@@ -1,0 +1,29 @@
+{
+  "checked_at_utc": "2026-10-26T05:36:10.624915+00:00",
+  "endpoints": {
+    "Planetary Computer STAC": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    },
+    "Copernicus Data Space STAC": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    },
+    "Copernicus Data Space OData": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    },
+    "ASF search": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    },
+    "Open-Meteo forecast": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    },
+    "Open-Meteo marine": {
+      "http_status": null,
+      "error": "ConnectionError: ('Connection aborted.', PermissionError(13, 'Permission denied'))"
+    }
+  }
+}

@@ -18,8 +18,8 @@ The detector's raw and Lee-equivalent filtered arrays both come from the exact A
 2. Convert to dB, ignore nodata, and apply a documented Lee-equivalent local speckle smoother for filtered products and detection.
 3. Rasterize the configured Natural Earth land polygon and expand it by **2.5 km**. Apply known port buffers (default **3 km**) and bright-target detection plus a **300 m** halo. Offshore platform data is not comprehensive; the result QA flags when that mask is unavailable.
 4. Form a local CFAR-like threshold from a **3.5 standard-deviation** depression relative to a local background. Apply global backscatter sanity bounds. This is a transparent heuristic, not a calibrated CFAR probability model.
-5. Morphologically close small fragments and merge nearby components. Retain components between **0.03 and 10 km²**, with at least **3 dB** contrast. Reject implausibly elongated or low-compactness shapes and large smooth regions typical of rain cells or island wind shadows. These limits are tunable screening rules; the real scene evaluation is too small to claim accuracy.
-6. Wind gate uses scene-time wind from Open-Meteo with a nominal valid interval of **2–10 m/s**. Outside the interval, candidate regions are retained with `wind_out_of_range` and a score penalty rather than silently discarded. Missing wind is null, flagged `wind_unavailable`, and receives no wind-support score. Scene results include a funnel: raw dark pixels, after land, after ship/platform/port, wind-pass/removal/unknown, area components, shape candidates, final candidates.
+5. Morphologically close small fragments and merge nearby components. Retain components between **0.03 and 10 km²**, with at least **3 dB** contrast. Label implausibly elongated or low-compactness shapes and large smooth regions typical of rain cells or island wind shadows as filtered features; retain their geometry with a reason code, hidden by default. These limits are tunable screening rules; the real scene evaluation is too small to claim accuracy.
+6. Wind gate uses scene-time wind from Open-Meteo with a nominal valid interval of **2–10 m/s**. Outside the interval, geometries are retained as filtered features with `wind_out_of_range` and a score cap of 19; missing wind is retained as `wind_unavailable` and also hidden by default. Area, contrast, shape, and large-smooth-region rejections are likewise retained with reason codes. These retained geometries are not accepted candidate counts. This code change has not yet been rerun on real scenes. Missing wind is null, flagged `wind_unavailable`, and receives no wind-support score. Scene results include a funnel: raw dark pixels, after land, after ship/platform/port, wind-pass/removal/unknown, area-pass components, accepted shape candidates, filtered dark areas by reason, final candidates.
 7. Calculate area in a metric CRS and output polygons in EPSG:4326. Keep output simplified and validate GeoJSON.
 8. Add scene-time context, QA (valid pixel %, AOI coverage, wind availability, age, processing duration, working resolution, footprint overlap and corner residual). A zero-candidate result is valid and includes the scene and funnel.
 
@@ -33,7 +33,7 @@ For each candidate centroid, use the nearest available ocean-current vector plus
 
 ## Live context and sources
 
-Wind is from Open-Meteo forecast/archive endpoints; current is from Open-Meteo Marine. Values are model output, with source API and timestamp displayed. They are not in-situ measurements. Conditions refresh every 10 minutes. AIS is hidden/unavailable unless a server-side aisstream.io streaming relay is actually configured and connected; a key alone does not mean positions are available.
+Wind is from Open-Meteo forecast/archive endpoints; current is from Open-Meteo Marine. Values are model output, with source API and timestamp displayed. They are not in-situ measurements. Conditions refresh every 10 minutes. AIS positions use a server-side aisstream.io websocket relay, a 30-minute in-memory ring buffer, and 15-second SSE updates. They are shown only while the server reports a connected stream; configure the key on the backend only.
 
 ## Known limitations
 
@@ -43,4 +43,4 @@ Wind is from Open-Meteo forecast/archive endpoints; current is from Open-Meteo M
 - Port and offshore-platform masks are incomplete. The QA flag communicates missing platform-mask data.
 - RTC footprint overlap does not equal valid ocean pixels. Review per-result AOI coverage and sea-pixel QA.
 - Drift and weather context are first-order/model estimates, not operational forecasts.
-- Network, STAC, Open-Meteo, or absent-AIS errors are shown directly. No sample/demo content is substituted.
+- Network, STAC, Open-Meteo, or absent-AIS errors are shown directly. No placeholder content is substituted.

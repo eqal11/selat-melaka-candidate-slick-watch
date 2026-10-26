@@ -7,11 +7,14 @@ import os
 import re
 import secrets
 import threading
+import time
+from collections import deque
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +23,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import create_engine, text
+from websockets.asyncio.client import connect
 
 from core import conditions
 from core.config import ROOT, Zones, zones
@@ -53,6 +57,11 @@ active = 0
 jobs: dict[str, dict[str, Any]] = {}
 cache: dict[str, tuple[Result, dict[str, bytes]]] = {}
 vessels: list[dict[str, Any]] = []
+ais_buffer: deque[dict[str, Any]] = deque(maxlen=50_000)
+ais_task: asyncio.Task[None] | None = None
+ais_status = "not_configured"
+health_checked_at = 0.0
+health_dependencies: dict[str, str] = {}
 engine = create_engine(f"sqlite:///{DB.as_posix()}", connect_args={"check_same_thread": False})
 
 
@@ -148,8 +157,14 @@ def run_job(job_id, body):
             columns = {row[1] for row in connection.execute(text("PRAGMA table_info(cache)")).fetchall()}
             if "preview" in columns:
                 connection.execute(
-                    text("INSERT OR REPLACE INTO cache (key, result, preview) VALUES (:key,:result,:preview)"),
-                    {"key": result.id, "result": result.model_dump_json(), "preview": assets["preview-filtered-fixed.webp"]},
+                    text(
+                        "INSERT OR REPLACE INTO cache (key, result, preview) VALUES (:key,:result,:preview)"
+                    ),
+                    {
+                        "key": result.id,
+                        "result": result.model_dump_json(),
+                        "preview": assets["preview-filtered-fixed.webp"],
+                    },
                 )
             else:
                 connection.execute(
@@ -168,7 +183,7 @@ def run_job(job_id, body):
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 app = FastAPI(
-    title="Selat Melaka Oil Spill Watch",
+    title="Selat Melaka SAR Candidate Slick Review Tool",
     version="0.2.0",
     description="Real Sentinel-1 candidate slick analysis. No result confirms a spill.",
 )
@@ -201,7 +216,26 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 @app.get("/api/v1/health", response_model=HealthResponse)
 def health():
-    return HealthResponse(status="ok", version="0.2.0")
+    global health_checked_at, health_dependencies
+    if time.monotonic() - health_checked_at > 60:
+        checks = {
+            "planetary_computer_stac": "https://planetarycomputer.microsoft.com/api/stac/v1",
+            "open_meteo_forecast": "https://api.open-meteo.com/v1/forecast?latitude=3&longitude=101&current=wind_speed_10m",
+        }
+        values: dict[str, str] = {}
+        for name, url in checks.items():
+            try:
+                response = httpx.get(url, timeout=httpx.Timeout(2.0, connect=1.0))
+                values[name] = (
+                    f"reachable_http_{response.status_code}"
+                    if response.status_code < 500
+                    else f"unhealthy_http_{response.status_code}"
+                )
+            except Exception as exc:
+                values[name] = f"unreachable_{type(exc).__name__}"
+        health_dependencies = values
+        health_checked_at = time.monotonic()
+    return HealthResponse(status="ok", version="0.2.0", dependencies=health_dependencies)
 
 
 @app.get("/api/v1/zones", response_model=Zones)
@@ -502,15 +536,87 @@ def live_conditions(request: Request, bbox: str = Query(..., description="west,s
     return {"data_label": "MODEL", "updated_at": now, "points": points, "refresh_minutes": 10}
 
 
+async def _ais_consumer() -> None:
+    global ais_status
+    key = os.getenv("AISSTREAM_API_KEY", "").strip()
+    if not key:
+        ais_status = "not_configured"
+        return
+    delay = 1
+    while True:
+        try:
+            async with connect("wss://stream.aisstream.io/v0/stream", open_timeout=15) as socket:
+                await socket.send(
+                    json.dumps(
+                        {
+                            "APIKey": key,
+                            "BoundingBoxes": [[[0.8, 95.0], [7.0, 104.5]]],
+                            "FilterMessageTypes": ["PositionReport"],
+                        }
+                    )
+                )
+                ais_status = "connected"
+                delay = 1
+                async for raw in socket:
+                    payload = json.loads(raw)
+                    metadata = payload.get("MetaData", {})
+                    report = payload.get("Message", {}).get("PositionReport", {})
+                    try:
+                        longitude = float(metadata["longitude"])
+                        latitude = float(metadata["latitude"])
+                        acquired = datetime.fromisoformat(str(metadata["time_utc"]).replace("Z", "+00:00"))
+                        mmsi = str(metadata["MMSI"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if not (95.0 <= longitude <= 104.5 and 0.8 <= latitude <= 7.0):
+                        continue
+                    ais_buffer.append(
+                        {
+                            "mmsi": mmsi,
+                            "longitude": longitude,
+                            "latitude": latitude,
+                            "time": acquired.astimezone(UTC).isoformat(),
+                            "sog_knots": report.get("Sog"),
+                            "cog_degrees": report.get("Cog"),
+                        }
+                    )
+                    cutoff = datetime.now(UTC) - timedelta(minutes=30)
+                    while ais_buffer and datetime.fromisoformat(ais_buffer[0]["time"]) < cutoff:
+                        ais_buffer.popleft()
+                    vessels[:] = list(ais_buffer)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            ais_status = f"reconnecting:{type(exc).__name__}"
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 60)
+
+
 @app.get("/api/v1/live/vessels")
-async def live_vessels():
+@limiter.limit("4/minute")
+async def live_vessels(request: Request):
+    global ais_task, ais_status
+
     async def stream():
-        if not os.getenv("AISSTREAM_API_KEY"):
+        global ais_task, ais_status
+        if not os.getenv("AISSTREAM_API_KEY", "").strip():
+            ais_status = "not_configured"
             yield 'event: status\ndata: {"status":"unavailable","message":"AIS key not configured"}\n\n'
             return
-        yield 'event: status\ndata: {"status":"unavailable","message":"AIS relay not connected"}\n\n'
+        if ais_task is None or ais_task.done():
+            ais_task = asyncio.create_task(_ais_consumer())
+        yield "event: status\ndata: " + json.dumps({"status": ais_status}) + "\n\n"
         while True:
-            yield "data: " + json.dumps({"type": "FeatureCollection", "features": vessels}) + "\n\n"
+            features = [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [v["longitude"], v["latitude"]]},
+                    "properties": v,
+                }
+                for v in list(ais_buffer)
+                if datetime.fromisoformat(v["time"]) >= datetime.now(UTC) - timedelta(minutes=30)
+            ]
+            yield "data: " + json.dumps({"type": "FeatureCollection", "features": features[-2000:]}) + "\n\n"
             await asyncio.sleep(15)
 
     return StreamingResponse(

@@ -7,7 +7,7 @@ test('loads a real Sentinel-1 analysis and renders its SAR image and candidate o
   await page.getByRole('button',{name:/Find real Sentinel/}).click();
   await expect.poll(async()=>page.getByLabel('Scene picker').locator('option').count(),{timeout:90000}).toBeGreaterThan(1);
   sceneId=await page.getByLabel('Scene picker').locator('option').nth(1).getAttribute('value')??undefined;
-  if(!sceneId) throw new Error('STAC returned no real scene option; no demo substituted.');
+  if(!sceneId) throw new Error('STAC returned no real scene option; no alternate result substituted.');
  }
  const dateToken=sceneId!.match(/_(20\d{6})T/)![1]!; const day=dateToken.slice(0,4)+'-'+dateToken.slice(4,6)+'-'+dateToken.slice(6,8);
  await page.getByLabel('Start UTC').fill(day); await page.getByLabel('End UTC').fill(day);

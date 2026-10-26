@@ -13,7 +13,12 @@ jobs:
         with: {python-version: '3.11'}
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
-      - run: uv run python -m pipeline.ingest
+      - run: uv run python -m pipeline.run_ingest
+      - name: Write run summary
+        if: always()
+        run: |
+          echo "## Archive ingestion" >> "$GITHUB_STEP_SUMMARY"
+          echo "The pipeline log above contains endpoint status, scene counts, and archive size. Failed runs do not reach the commit step." >> "$GITHUB_STEP_SUMMARY"
       - name: Commit successful archive updates
         run: |
           if [[ -n "$(git status --porcelain data/archive)" ]]; then

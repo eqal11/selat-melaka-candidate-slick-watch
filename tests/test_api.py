@@ -13,9 +13,9 @@ def test_health_zones_and_bbox_validation():
 
 
 def test_analysis_requires_real_scene_or_valid_date_range():
-    response = client.post("/api/v1/analyze", json={"aoi": [100.8, 2.65, 101.3, 3.15], "demo": True})
+    response = client.post("/api/v1/analyze", json={"aoi": [100.8, 2.65, 101.3, 3.15], "offline_mode": True})
     assert response.status_code == 422
-    assert "demo" in response.text
+    assert "offline_mode" in response.text
 
 
 def test_history_contract_contains_only_real_archive():
@@ -42,3 +42,10 @@ def test_validation_case_register_has_sources_and_no_invented_results():
 
     static_register = json.loads(Path("web/public/validation-cases.json").read_text(encoding="utf-8"))
     assert static_register == body
+
+
+def test_ais_stream_reports_missing_server_key(monkeypatch):
+    monkeypatch.delenv("AISSTREAM_API_KEY", raising=False)
+    response = client.get("/api/v1/live/vessels")
+    assert response.status_code == 200
+    assert "AIS key not configured" in response.text

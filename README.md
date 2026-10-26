@@ -1,10 +1,10 @@
 ---
-title: Selat Melaka Oil Spill Watch
+title: Selat Melaka SAR Candidate Slick Review Tool
 sdk: docker
 app_port: 8000
 ---
 
-# Selat Melaka Oil Spill Watch
+# Selat Melaka SAR Candidate Slick Review Tool
 
 A GIS portfolio application for inspecting **candidate slicks** in real Sentinel‑1 VV SAR scenes around the Strait of Malacca and Singapore Strait. Results include measured area, transparent score features, scene-time weather context, first-order 6/12/24-hour drift, review imagery and a scene history archive.
 
@@ -14,7 +14,7 @@ Sentinel‑1 imagery is near-real-time at best (often hours of latency), and a l
 
 ## Real-data only
 
-The app has no demo case, synthetic fallback, or placeholder result. Every analysis is tied to a Planetary Computer Sentinel‑1 STAC item. The result shows the exact scene ID and public STAC link, acquisition UTC time and age, satellite, orbit direction and VV polarization. If STAC or scene loading fails, the job reports its error and no result is shown. Missing scene-time wind remains explicitly unavailable and reduces candidate scores; it is never filled with a made-up value. A zero-candidate scene is a valid result.
+The app has no sample case, synthetic fallback, or placeholder result. Every analysis is tied to a Planetary Computer Sentinel‑1 STAC item. The result shows the exact scene ID and public STAC link, acquisition UTC time and age, satellite, orbit direction and VV polarization. If STAC or scene loading fails, the job reports its error and no result is shown. Missing scene-time wind remains explicitly unavailable and reduces candidate scores; it is never filled with a made-up value. A zero-candidate scene is a valid result.
 
 All successful results include matching raw and Lee-filtered VV dB WebP overlays generated from the exact AOI array used by processing. Fixed grayscale stretch is −25 to 0 dB; auto stretch is per-scene p2–p98. The map provides pixel inspection, AOI and scene outlines, candidate outlines, a raw/filtered swipe curtain, and synchronized side-by-side maps. Manual reviewer notes and checklist are local to the browser and exportable; they are not system confirmation.
 
@@ -24,7 +24,7 @@ Captured from real Sentinel‑1 scene `S1D_IW_GRDH_1SDV_20261002T113320_20261002
 
 ![Real Sentinel-1 VV image, raw view](docs/screenshots/real-scene-raw.png)
 
-![Real Sentinel-1 VV image with candidate polygons enabled; zero candidates for this scene](docs/screenshots/real-scene-with-candidates.png)
+![Real Sentinel-1 VV image with two candidate slick polygons shown](docs/screenshots/real-scene-with-candidates.png)
 
 ![Real Sentinel-1 SAR swipe comparison](docs/screenshots/real-scene-swipe.png)
 
@@ -45,13 +45,13 @@ flowchart LR
 - `/core`: STAC, bounded AOI reads, SAR preparation, dark-region detector, score, drift, QA, preview assets.
 - `/api`: FastAPI jobs, validation, rate limits, live conditions, pixel/profile inspection and archives.
 - `/web`: Vite/React/TypeScript, MapLibre, responsive review interface, lazy drift/history visualizations.
-- `/pipeline`: idempotent real-scene archive ingestion and Natural Earth refresh.
+- `/pipeline`: idempotent real-scene archive ingestion, connectivity checks, and resumable validation catalog searches.
 - `/data/archive`: permanent GeoJSON + small raw/filtered WebP history. SQLite is disposable state.
 - `/validation`: sourced public incident checks and real scene metrics. Test-only synthetic fixture is in `/tests`.
 
 ## Data attribution
 
-Copernicus Sentinel‑1 via Microsoft Planetary Computer; Open‑Meteo forecast/archive and marine APIs; Natural Earth public-domain land data; © OpenStreetMap contributors; OpenSeaMap seamarks; optional aisstream.io. A server-side AIS streaming relay is not currently active, and the browser never receives the AIS key.
+Copernicus Sentinel‑1 via Microsoft Planetary Computer; Open‑Meteo forecast/archive and marine APIs; Natural Earth public-domain land data; © OpenStreetMap contributors; OpenSeaMap seamarks; optional aisstream.io. A server-side AIS streaming relay is implemented with a 30-minute in-memory buffer and throttled SSE; it stays unavailable until `AISSTREAM_API_KEY` is configured and the websocket connects. The browser never receives the key.
 
 ## Run locally
 
@@ -97,7 +97,7 @@ A network-dependent browser test can run one real scene by setting `REAL_SCENE_I
 uv run python -m pipeline.ingest --days 60
 ```
 
-The scheduled GitHub Action processes new scenes and commits the archive only after a successful complete ingestion. It supports daily and manual triggers. Archive is size-capped at 50 MB. See `validation/report.md` for actual command outcomes, archive metrics, the source-verified worldwide case register, and the cases whose scene matches and detector outcomes could not be verified in this environment.
+The scheduled GitHub Action processes new scenes and commits the archive only after a successful complete ingestion. It supports daily and manual triggers. Archive is size-capped at 50 MB. See `validation/report.md` for actual command outcomes and the archived scene counts. The current network-blocked run did not match or process the worldwide validation cases; previous archive metrics predate the flag-and-keep change and are not presented as its measured output.
 
 ## Deploy
 
