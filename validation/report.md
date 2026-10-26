@@ -173,3 +173,37 @@ Two zero-byte legacy files were not removed because the workspace rejected file 
 ## Known limitations
 
 The 23-scene count is small, biased to scenes returned by the current RTC catalog query, and largely unlabelled. The detector has not been calibrated against a verified slick geometry. The sample includes wind/current gaps and incomplete offshore-platform masking. The score is a rule-based 0–100 heuristic, not a probability. No claim of incident detection, scientific sensitivity/specificity, or false-alarm rate is supported. See `docs/METHODOLOGY.md` for parameters and physical limitations.
+
+
+## Deployment follow-up — 2026-10-26
+
+The first Render log supplied by the user showed a successful Docker build followed by `ImportError: libexpat.so.1` at Rasterio import. Commit `5fb5ed5` explicitly installs the native runtime and checks imports during Docker build. GitHub Actions run https://github.com/eqal11/selat-melaka-candidate-slick-watch/actions/runs/40323298906 completed its Python and Linux-container jobs successfully; its frontend job failed at Playwright. The frontend job had no explicit Python/uv environment, and its validation-register assertion still expected obsolete UI text. These concrete configuration/assertion issues were corrected locally; the revised remote workflow has not yet been run.
+
+Actual hosted requests made with Windows `Invoke-RestMethod` succeeded for `https://selat-melaka-api.onrender.com/health`, `/api/v1/zones` and `/api/v1/validation/cases`. Health returned `status: ok` and reported HTTP 200 for Planetary Computer STAC and Open-Meteo forecast; the other endpoints returned 3 zones and 9 case-register entries. An earlier curl probe timed out after 20 seconds, so this does not establish a cold-start latency guarantee.
+
+Local frontend checks after the CI/browser changes:
+
+- `npm.cmd run lint`: passed.
+- `npm.cmd run build`: TypeScript and Vite build passed. Vite still warned about chunks over 500 kB (MapLibre and deck.gl); that performance requirement is not fully met.
+- `npm.cmd test`: 3 Vitest tests passed.
+- With a local API on port 8000 and Vite on port 5176, the PowerShell command below exited 0: **2 Playwright tests passed, 1 live-analysis test skipped, 9.4 seconds total**.
+
+```powershell
+$env:E2E_EXTERNAL_SERVERS='1'
+$env:E2E_WEB_PORT='5176'
+$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm.cmd run e2e -- --workers=1
+```
+
+The browser flow fetched the committed real 2026-10-02 scene, its 2 archived polygons and raw/filtered WebP responses, checked that both maps and polygon lines rendered, and captured `web/test-results/real-archive-sar-and-polygons.png`. The validation-register flow checked source links and processing status against the actual API response. Unrelated live-condition and basemap requests were aborted in these tests; no replacement pixels or model values were supplied. Online basemap/live-model rendering was therefore not validated by this browser run. Earlier attempts using Playwright-managed Windows servers hit a raster-response timeout and later stalled during server cleanup; using separately managed servers allowed the full test command to finish. Test servers were stopped afterwards.
+
+This verifies real archive replay, not a fresh Sentinel-1 analysis on Render, detector accuracy, incident detection rate, or a hosted 50 x 50 km performance target. The live-analysis test remains an explicit `REAL_SCENE_ID` opt-in; zero candidates is valid and no longer makes that test fail by itself.
+
+
+Additional hosted archive checks succeeded after an earlier 20-second history request timed out. A retry with a 55-second timeout returned **23 real archive entries**. For archived scene `S1D_IW_GRDH_1SDV_20261002T113320_20261002T113345_004836_009162_rtc`, result ID `60f7b05ee776fa7ca34007c2`, both hosted images returned HTTP 200 and `image/webp`: raw **70,136 bytes**, filtered **41,712 bytes**. This verifies published archive files, not new scene processing. The cause of the earlier timeouts was not established.
+
+```powershell
+Invoke-RestMethod -Uri 'https://selat-melaka-api.onrender.com/api/v1/history' -TimeoutSec 55
+Invoke-WebRequest -UseBasicParsing -Uri 'https://selat-melaka-api.onrender.com/api/v1/history/60f7b05ee776fa7ca34007c2/raw.webp' -TimeoutSec 15
+Invoke-WebRequest -UseBasicParsing -Uri 'https://selat-melaka-api.onrender.com/api/v1/history/60f7b05ee776fa7ca34007c2/filtered.webp' -TimeoutSec 15
+```

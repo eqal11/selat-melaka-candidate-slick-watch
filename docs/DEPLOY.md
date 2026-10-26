@@ -1,6 +1,6 @@
 # Deployment
 
-Deployments have not been created or verified. Use accounts and secrets you control. Deployments and external connectivity were not verified in this run.
+The Render API at https://selat-melaka-api.onrender.com was verified on 2026-10-26 for health, 3 zones, 9 validation-register cases, 23 archive entries and raw/filtered archived SAR images. Fresh hosted scene analysis and performance remain unverified; some initial probes timed out. The Vercel frontend has not yet been deployed. Use accounts and secrets you control.
 
 ## Render Free backend trial
 

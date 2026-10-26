@@ -23,6 +23,11 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+        working-directory: .
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
 
