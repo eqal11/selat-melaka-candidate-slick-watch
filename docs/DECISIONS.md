@@ -1,5 +1,7 @@
 # Decisions
 
+- Render deployment log (2026-10-26 12:23 UTC) showed successful image build followed by Rasterio import failure because libexpat.so.1 was absent. Install Debian libexpat1 explicitly and import Rasterio plus the API as the non-root user during Docker build. CI also builds the Linux image and checks HTTP startup and packaged zone/case resources. Local Linux image verification is pending because Docker Desktop engine is stopped; the log establishes this native-library failure, not an out-of-memory failure.
+
 - Render Free is offered only as an unverified deployment trial after Hugging Face Docker creation was shown as paid. The blueprint uses one active analysis, a server-enforced 128 MB estimated array budget, no retained in-memory result cache, and one numerical-library thread. Request parameters cannot raise the server memory ceiling. This does not establish total-process peak RAM or real-scene performance on a 512 MB instance; scientific detector parameters are unchanged.
 
 - Docker runs as UID 1000 to match Hugging Face runtime permissions. Deployment packaging includes the sourced validation/cases.yaml register in the API Docker image. Local unverified validation outputs are excluded from this copy. The image build was not verified on 2026-10-26 because Docker Desktop Linux engine was not running.

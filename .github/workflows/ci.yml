@@ -27,3 +27,32 @@ jobs:
       - run: npm run e2e
 
 
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux runtime image
+        run: docker build --tag selat-watch:ci .
+      - name: Check container startup and packaged resources
+        run: |
+          docker run --detach --name selat-watch-ci --publish 127.0.0.1:8000:8000 selat-watch:ci
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 5 http://127.0.0.1:8000/api/v1/zones > /tmp/selat-zones.json; then
+              curl --fail --show-error --silent --max-time 10 http://127.0.0.1:8000/api/v1/validation/cases > /tmp/selat-cases.json
+              python -c "import json; assert len(json.load(open('/tmp/selat-zones.json'))['zones']) == 3; assert len(json.load(open('/tmp/selat-cases.json'))['cases']) >= 8"
+              exit 0
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' selat-watch-ci)" != "true" ]]; then
+              docker logs selat-watch-ci
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs selat-watch-ci
+          exit 1
+      - name: Collect container logs and clean up
+        if: always()
+        run: |
+          docker logs selat-watch-ci || true
+          docker rm --force selat-watch-ci || true

@@ -17,6 +17,10 @@ Render Free is an alternative trial with 512 MB RAM and 0.1 CPU, not a verified 
 
 Render Free sleeps after 15 idle minutes and can take about one minute to wake. SQLite/cache is lost on sleep, restart or redeploy; the committed archive stays in Git. Large outbound imagery traffic may trigger free-service restrictions. No AIS key is required for deployment; add it server-side only if needed. Docker build and hosted memory/performance remain unverified because the local Docker Linux engine is not running and no Render service has been created.
 
+### Missing native library during startup
+
+The first Render deployment built the image but exited while importing Rasterio: `ImportError: libexpat.so.1: cannot open shared object file`. The Dockerfile now installs Debian `libexpat1`, then imports Rasterio and the API as the non-root runtime user during build. The CI container job also starts the actual Linux image and checks `/api/v1/zones` and `/api/v1/validation/cases`. These checks detect missing native libraries or packaged resources before release. The corrected Linux build has not yet been run locally because the Docker engine is stopped. After pushing the fix, verify the new deployment logs show successful startup before treating it as live. Debian package: https://packages.debian.org/trixie/libexpat1 .
+
 ## Frontend on Vercel
 
 1. Push this repository to GitHub and import it as a new Vercel project.
