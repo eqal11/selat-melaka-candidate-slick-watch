@@ -1,6 +1,16 @@
 # Real-data validation report
 
-**Run date:** 2026-10-26 UTC. **Policy:** all entries below are actual Sentinel-1 observations and actual API responses. No demo records or synthetic metric values are included. Synthetic numerical fixtures remain under `tests/` only and are excluded from this report's measured results.
+**Run date:** 2026-10-26 UTC. **Policy:** reported scene metrics below come from actual Sentinel-1 observations and actual API responses. The case register contains source-verified literature/agency incident metadata only; it is not a set of detector outputs. No demo records or synthetic metric values are included. Synthetic numerical fixtures remain under `tests/` only and are excluded from reported measured results.
+
+## Expanded real-world validation case register (source verification only)
+
+`cases.yaml` now contains five documented spill incidents (Princess Empress, Sanchi, X-Press Pearl, Huntington Beach/Pipeline P00547, Grande America) and four natural seep sites (Coal Oil Point, GC600, Bush Hill, MC118), with primary/scientific source URLs. Incident extents are transcribed as reported dimensions/areas where sources provide them; they are not converted into polygons. Seep locations are site-level backgrounds, not dated spill labels.
+
+**No scene matching or detector processing was completed for these nine worldwide cases in this run.** Direct requests to the Planetary Computer STAC endpoint from the Python runtime failed with `PermissionError: [Errno 13] Permission denied`; network access through web search allowed source checks but not catalogue/API requests or raster retrieval. Therefore every new case has `scene_search.status: not_verified`, null scene ID/time gap, and null detector result. No candidate count, detected/missed label, distance, IoU, wind, funnel, detection rate or false-alarm change is reported for these cases. Do not interpret “unverified” as “no scene” or “not detected.”
+
+The app's **Validation cases** tab and `/api/v1/validation/cases` endpoint expose these sourced records and explicitly show that there are no matched-scene results yet. They do not render a SAR image or polygons without an actual analysis result. No AOI-limit exception or case-specific global processing route was added, because no vetted case-to-scene association was available to authorize those larger requests.
+
+Detector parameters were **not tuned** against the new cases. Existing measured same-scene before/after and 23-scene Malacca archive results remain in the sections below; they are not worldwide-case results. Scene matching via Planetary Computer, Copernicus Data Space and ASF, actual detector runs, case-specific polygon overlays and before/after false-alarm measurement remain unverified and are acceptance gaps.
 
 ## Commands and quality gates actually run
 
@@ -11,6 +21,15 @@
 - In `web/`: `npm run lint`, `npm test`, `npm run build`: passed; Vitest **2 tests passed**. Vite emitted a bundle-size warning (main JS 1.218 MB minified, 341.25 kB gzip; lazy drift and history chunks are separate).
 - In `web/`, PowerShell command: `$env:REAL_SCENE_ID='S1D_IW_GRDH_1SDV_20261002T113320_20261002T113345_004836_009162_rtc'; $env:PLAYWRIGHT_BROWSERS_PATH=(Resolve-Path '../work/pw-browsers').Path; npm run e2e -- --reporter=line`: **1 real-scene Playwright test passed**. It loaded the real STAC scene, ran analysis, waited for raw and filtered WebP map sources, verified rendered candidate line features, toggled swipe/side-by-side, and asserted the three review canvases after selecting a candidate. Screenshots are embedded below.
 - `git diff --check`: passed. `docker compose config` is checked separately below.
+
+Case-register additions and API/UI checks in this run:
+
+- Actual direct-query probe: `.venv\Scripts\python.exe work\search_cases.py`; it failed before any catalog query with the network `PermissionError` above.
+- `.venv\Scripts\pytest.exe -q`: **14 passed**, 8 third-party deprecation warnings (3.77 s).
+- `.venv\Scripts\ruff.exe check core api pipeline tests`: passed; `.venv\Scripts\mypy.exe --follow-imports=skip --no-incremental core api pipeline`: passed (18 source files).
+- In `web/`: `npm run lint`, `npm test -- --run` (**3 passed**), and `npm run build`: passed. Vite still reports the existing main bundle >500 kB warning.
+- In `web/`: `PLAYWRIGHT_BROWSERS_PATH=<repo>/work/pw-browsers npm run e2e -- validation-cases.spec.ts --reporter=line`: **1 passed** (9 source cards, 23 source links, no unverified detector outputs). This tests the register tab only, not real-scene case analysis.
+- `git diff --check`: passed.
 
 ## Real 60-day archive run
 

@@ -337,6 +337,14 @@ class HistoryResponse(Model):
     entries: list[ArchiveEntry]
 
 
+class ValidationCasesResponse(Model):
+    version: int
+    title: str
+    data_label: str
+    scene_search_note: str
+    cases: list[dict[str, Any]]
+
+
 class HealthResponse(Model):
     status: Literal["ok"]
     version: str

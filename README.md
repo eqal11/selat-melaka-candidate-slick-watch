@@ -97,7 +97,7 @@ A network-dependent browser test can run one real scene by setting `REAL_SCENE_I
 uv run python -m pipeline.ingest --days 60
 ```
 
-The scheduled GitHub Action processes new scenes and commits the archive only after a successful complete ingestion. It supports daily and manual triggers. Archive is size-capped at 50 MB. See `validation/report.md` for the actual command outcomes, current archive, incidents, exact real scene metrics, and gaps.
+The scheduled GitHub Action processes new scenes and commits the archive only after a successful complete ingestion. It supports daily and manual triggers. Archive is size-capped at 50 MB. See `validation/report.md` for actual command outcomes, archive metrics, the source-verified worldwide case register, and the cases whose scene matches and detector outcomes could not be verified in this environment.
 
 ## Deploy
 

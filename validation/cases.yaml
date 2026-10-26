@@ -1,3 +1,231 @@
 version: 1
-# Verified incident records and scene matching are documented in incidents.yaml.
-cases: []
+title: Evidence register for independent real-scene detector validation
+data_label: REAL public-source case register; no detector outcomes asserted
+scene_search_note: Sentinel-1 scene search across Planetary Computer, Copernicus Data Space and ASF was not completed
+  in the current environment. Direct catalogue requests failed with a network PermissionError. No scene IDs, scene
+  gaps, detector counts, wind values or overlap metrics are inferred from that failure.
+cases:
+- id: princess-empress-philippines-2023
+  category: documented_spill
+  status: source_verified_scene_unsearched
+  incident_date: '2023-02-28'
+  extent_observation_date: '2023-03-01'
+  location: Off Balingawan Point, Naujan, Oriental Mindoro, Philippines
+  location_coordinates:
+  - 121.53
+  - 13.3161667
+  coordinate_basis: Approximate coordinates from NOAA IncidentNews; point represents incident location, not slick
+    boundary.
+  reported_extent: Reported slick about 6 km by 4 km on 1 March 2023; dimensions are not a georeferenced polygon.
+  extent_sources:
+  - https://apnews.com/article/45a226975daac5a95b0c7e7c66cfb6b0
+  sources:
+  - organization: NOAA IncidentNews
+    url: https://incidentnews.noaa.gov/incident/10578
+  - organization: Philippine Space Agency
+    url: https://philsa.gov.ph/news/philsa-shows-journalists-extent-of-mindoro-oil-spill-as-captured-by-satellite-images/
+  - organization: Associated Press
+    url: https://apnews.com/article/45a226975daac5a95b0c7e7c66cfb6b0
+  scene_search: &id001
+    status: not_verified
+    platforms:
+    - Microsoft Planetary Computer
+    - Copernicus Data Space
+    - ASF
+    window_rule: Incident date ±3 days; RTC then GRD
+    scene_id: null
+    acquisition_time_utc: null
+    time_gap_hours: null
+  detector_result: null
+- id: sanchi-east-china-sea-2018
+  category: documented_spill
+  status: source_verified_scene_unsearched
+  incident_date: '2018-01-06'
+  extent_observation_date: '2018-01-15'
+  location: East China Sea, approximately 160 nautical miles off Shanghai, China
+  location_coordinates:
+  - 124.9805
+  - 31.5287
+  coordinate_basis: Approximate incident position reported by NOAA IncidentNews.
+  reported_extent: Chinese authorities estimated a surface slick area up to 300 km² on 15 January; this is not a
+    mapped polygon.
+  extent_sources:
+  - https://cedre.fr/en/resources/incident-information-sheets/mt-sanchi
+  sources:
+  - organization: NOAA IncidentNews
+    url: https://incidentnews.noaa.gov/incident/9646
+  - organization: Marine Pollution Bulletin research article
+    url: https://www.sciencedirect.com/science/article/pii/S0025326X20300357
+  - organization: CEDRE incident information sheet
+    url: https://cedre.fr/en/resources/incident-information-sheets/mt-sanchi
+  scene_search: *id001
+  detector_result: null
+- id: x-press-pearl-sri-lanka-2021
+  category: documented_spill
+  status: source_verified_scene_unsearched
+  incident_date: '2021-06-08'
+  extent_observation_date: '2021-06-14'
+  location: Off Colombo, western coast of Sri Lanka; spill from the wreck of X-Press Pearl
+  location_coordinates: null
+  coordinate_basis: Sources describe the location by place name; no exact source point is encoded here.
+  reported_extent: Satellite analysis reported an oil slick length of about 4.3 km on 14 June 2021; no extent polygon
+    was published in the cited record.
+  extent_sources:
+  - https://www.parliament.lk/uploads/comreports/1690190230023243.pdf
+  sources:
+  - organization: UN Environment Programme
+    url: https://wedocs.unep.org/handle/20.500.11822/36608
+  - organization: Parliament of Sri Lanka report citing Sentinel-1 analysis by CLS
+    url: https://www.parliament.lk/uploads/comreports/1690190230023243.pdf
+  scene_search: *id001
+  detector_result: null
+- id: huntington-beach-california-2021
+  category: documented_spill
+  status: source_verified_scene_unsearched
+  incident_date: '2021-10-01'
+  extent_observation_date: '2021-10-02'
+  location: Off Huntington Beach, Orange County, California, USA
+  location_coordinates: null
+  coordinate_basis: Sources report offshore distance and named coast; no exact source point is encoded here.
+  reported_extent: A response report described a roughly 13 square mile (33.67 km²) surface slick; not a georeferenced
+    slick polygon.
+  extent_sources:
+  - https://www.ocsan.gov/wp-content/uploads/2024/05/OC-San-2021-2022-Marine-Mo.pdf
+  sources:
+  - organization: NOAA Damage Assessment, Remediation, and Restoration Program
+    url: https://darrp.noaa.gov/oil-spills/pipeline-p00547-huntington-beach-oil-spill
+  - organization: Orange County Sanitation District marine monitoring report
+    url: https://www.ocsan.gov/wp-content/uploads/2024/05/OC-San-2021-2022-Marine-Mo.pdf
+  scene_search: *id001
+  detector_result: null
+- id: grande-america-bay-of-biscay-2019
+  category: documented_spill
+  status: source_verified_scene_unsearched
+  incident_date: '2019-03-12'
+  extent_observation_date: '2019-03-19'
+  location: Bay of Biscay, approximately 300 km off the French coast
+  location_coordinates: null
+  coordinate_basis: ESA source gives a regional location only; no point or polygon is encoded.
+  reported_extent: ESA described the Sentinel-1-observed slick as approximately 50 km long on 19 March 2019; no
+    area or boundary polygon is asserted.
+  extent_sources:
+  - https://www.esa.int/ESA_Multimedia/Images/2019/03/Grande_America_oil_spill_imaged
+  sources:
+  - organization: European Space Agency
+    url: https://www.esa.int/ESA_Multimedia/Images/2019/03/Grande_America_oil_spill_imaged
+  - organization: CEDRE incident information sheet
+    url: https://cedre.fr/en/resources/incident-information-sheets/grande-america
+  scene_search: *id001
+  detector_result: null
+- id: coal-oil-point-california-natural-seep
+  category: natural_seep
+  status: source_verified_scene_unsearched
+  incident_date: null
+  location: Coal Oil Point seep field, Santa Barbara Channel, California, USA
+  location_coordinates: null
+  coordinate_basis: Named seep field; no point approximation is encoded.
+  reported_extent: Persistent natural seep field with recurring surface slicks; a single dated slick extent is not
+    applicable to this site-level case.
+  sources:
+  - organization: Leifer, Luyendyk and Broderick, Marine and Petroleum Geology
+    url: https://www.sciencedirect.com/science/article/pii/S026481720600047X
+  - organization: USGS Open-File Report 2009-1225
+    url: https://pubs.usgs.gov/publication/ofr20091225
+  scene_search:
+    status: not_verified
+    platforms:
+    - Microsoft Planetary Computer
+    - Copernicus Data Space
+    - ASF
+    window_rule: null
+    scene_id: null
+    acquisition_time_utc: null
+    time_gap_hours: null
+  detector_result: null
+- id: gc600-gulf-of-mexico-natural-seep
+  category: natural_seep
+  status: source_verified_scene_unsearched
+  incident_date: null
+  location: Green Canyon Block 600 (GC600), northern Gulf of Mexico
+  location_coordinates:
+  - -90.5693
+  - 27.3696
+  coordinate_basis: Published mean seep-site coordinates in the cited peer-reviewed study.
+  reported_extent: Known active natural seep; literature documents chronic oil slick visibility in this block. No
+    single event extent applies.
+  sources:
+  - organization: Published study reporting GC600 seep coordinates and seep characteristics
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC4737931/
+  - organization: Time series video analysis of natural hydrocarbon seeps, Marine and Petroleum Geology
+    url: https://www.sciencedirect.com/science/article/abs/pii/S0264817217300247
+  - organization: USGS SAR analysis of natural and unnatural oil slicks
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC5064732/
+  scene_search:
+    status: not_verified
+    platforms:
+    - Microsoft Planetary Computer
+    - Copernicus Data Space
+    - ASF
+    window_rule: null
+    scene_id: null
+    acquisition_time_utc: null
+    time_gap_hours: null
+  detector_result: null
+- id: bush-hill-gulf-of-mexico-natural-seep
+  category: natural_seep
+  status: source_verified_scene_unsearched
+  incident_date: null
+  location: Bush Hill, Green Canyon blocks 184/185, Gulf of Mexico
+  location_coordinates:
+  - -91.5
+  - 27.7833
+  coordinate_basis: Published site coordinates in the cited peer-reviewed study.
+  reported_extent: Natural oil and gas seep site beneath a location with persistent SAR-observed slicks; no single
+    event extent applies.
+  sources:
+  - organization: Tryon et al., Geochemistry, Geophysics, Geosystems
+    url: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2004GC000778
+  - organization: Frontiers in Earth Science study of Bush Hill
+    url: https://www.frontiersin.org/journals/earth-science/articles/10.3389/feart.2021.604930/full
+  - organization: USGS SAR analysis of natural and unnatural oil slicks
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC5064732/
+  scene_search:
+    status: not_verified
+    platforms:
+    - Microsoft Planetary Computer
+    - Copernicus Data Space
+    - ASF
+    window_rule: null
+    scene_id: null
+    acquisition_time_utc: null
+    time_gap_hours: null
+  detector_result: null
+- id: mc118-gulf-of-mexico-natural-seep
+  category: natural_seep
+  status: source_verified_scene_unsearched
+  incident_date: null
+  location: Mississippi Canyon Block 118 (MC118), northern Gulf of Mexico
+  location_coordinates:
+  - -88.4928
+  - 28.8522
+  coordinate_basis: Published mean seep-site coordinates in the cited peer-reviewed study.
+  reported_extent: Natural gas and oil seep field; persistent-site status is documented, but no single event extent
+    applies.
+  sources:
+  - organization: Published study reporting MC118 coordinates and natural seep setting
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC4737931/
+  - organization: Talukder et al., Geochemistry, Geophysics, Geosystems
+    url: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1002/ggge.20130
+  - organization: USGS SAR analysis of natural and unnatural oil slicks
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC5064732/
+  scene_search:
+    status: not_verified
+    platforms:
+    - Microsoft Planetary Computer
+    - Copernicus Data Space
+    - ASF
+    window_rule: null
+    scene_id: null
+    acquisition_time_utc: null
+    time_gap_hours: null
+  detector_result: null

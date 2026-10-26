@@ -13,6 +13,7 @@ OpenAPI: `/docs`. All endpoints use the `/api/v1` prefix. No endpoint accepts a 
 - `GET /results/{id}/pixel?lon=&lat=&variant=raw|filtered`
 - `GET /results/{id}/profile/{candidate_id}`
 - `GET /history?zone=&start=&end=` — committed real archive only.
+- `GET /validation/cases` — source-linked global incident/seep register; cases remain `not_verified` until scene search and detector analysis are actually completed.
 - `GET /history/{result_id}/candidates.geojson`
 - `GET /history/{result_id}/{raw|filtered}.webp`
 - `GET /live/conditions?bbox=` — Open-Meteo source/API and value timestamp included.

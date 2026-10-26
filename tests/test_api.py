@@ -24,3 +24,21 @@ def test_history_contract_contains_only_real_archive():
     body = response.json()
     assert body["data_label"] == "REAL Sentinel-1"
     assert all(entry["data_label"] == "REAL Sentinel-1" for entry in body["entries"])
+
+
+def test_validation_case_register_has_sources_and_no_invented_results():
+    response = client.get("/api/v1/validation/cases")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["cases"]) >= 8
+    incidents = [case for case in body["cases"] if case["category"] == "documented_spill"]
+    seeps = [case for case in body["cases"] if case["category"] == "natural_seep"]
+    assert len(incidents) >= 4 and len(seeps) >= 3
+    assert all(len(case["sources"]) >= 2 for case in body["cases"])
+    assert all(case["detector_result"] is None for case in body["cases"])
+    assert all(case["scene_search"]["scene_id"] is None for case in body["cases"])
+    import json
+    from pathlib import Path
+
+    static_register = json.loads(Path("web/public/validation-cases.json").read_text(encoding="utf-8"))
+    assert static_register == body

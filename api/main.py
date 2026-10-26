@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -35,6 +36,7 @@ from core.models import (
     ProfileResponse,
     Result,
     SceneList,
+    ValidationCasesResponse,
     validate_bbox,
 )
 from core.scenes import search
@@ -205,6 +207,18 @@ def health():
 @app.get("/api/v1/zones", response_model=Zones)
 def get_zones():
     return zones().model_dump()
+
+
+@app.get("/api/v1/validation/cases", response_model=ValidationCasesResponse)
+def validation_cases():
+    """Return source-linked case register; unrun cases never imply detector outcomes."""
+    path = ROOT / "validation" / "cases.yaml"
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+        return ValidationCasesResponse.model_validate(payload)
+    except Exception as exc:
+        log.exception("Validation case register could not be loaded")
+        raise HTTPException(500, "Validation case register is invalid or unavailable") from exc
 
 
 @app.get("/api/v1/scenes", response_model=SceneList)
