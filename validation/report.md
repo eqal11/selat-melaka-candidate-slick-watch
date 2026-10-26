@@ -29,7 +29,7 @@ Build output now separates the main UI (267.22 kB minified), charts (406.12 kB),
 - `npm run e2e -- --reporter=line` with `REAL_SCENE_ID` set: **2 passed** (16.7 s total); the actual real-scene flow used the cached result described above.
 - `docker compose config`: passed. `docker compose up --build -d`: not run because Docker Desktop's Linux engine pipe was unavailable (`dockerDesktopLinuxEngine` not found). `act` was not run.
 - `python -m pip_audit`: not run; module is not installed in the environment. `npm audit --audit-level=moderate`: could not obtain advisories because TLS certificate verification failed for `registry.npmjs.org`; no vulnerability count is claimed.
-- Secret scan checked the current working tree and every file blob in **8 git-history commits**; **0 findings**. `.env.example` was excluded by design.
+- Secret scan checked the current working tree and every file blob in **10 git-history commits**; **0 findings**. `.env.example` was excluded by design.
 - `git diff --check`: passed after the final code edits.
 
 The API health response now reports cached Planetary Computer STAC and Open-Meteo reachability checks; these were not reachable in this shell. The AIS websocket relay is implemented with a bounded ring buffer, 30-minute retention, 15-second SSE updates and per-IP throttling, but no AIS key was present to verify it.
